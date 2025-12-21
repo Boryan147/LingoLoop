@@ -1,12 +1,15 @@
 import React, { useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { StudyStats } from '../types';
+import { StudyStats, VocabularyItem } from '../types';
 import { Flame, Brain, Layers, ArrowUpRight, Camera, Download, Upload, FileJson } from 'lucide-react';
 import { exportBackup, importBackup } from '../services/storage';
 
 interface DashboardProps {
   stats: StudyStats;
   onReviewStart: () => void;
+  items: VocabularyItem[];
+  userId?: string;
+  onUpdate: () => void;
 }
 
 // Mock data for the forgetting curve visualization

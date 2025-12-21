@@ -11,8 +11,9 @@ export interface VocabularyItem {
   definition: string;
   examples: string[];
   scenario: string;
+  user_id?: string;
   createdAt: number;
-  
+
   // SRS Properties
   nextReviewDate: number; // Timestamp
   interval: number; // Days

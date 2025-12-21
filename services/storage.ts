@@ -30,6 +30,7 @@ export const getItems = async (userId?: string): Promise<VocabularyItem[]> => {
     const { data, error } = await supabase
       .from('vocabulary')
       .select('*')
+      .eq('user_id', userId)
       .order('createdAt', { ascending: false });
 
     if (error) throw error;
@@ -70,9 +71,10 @@ export const updateItem = async (updatedItem: VocabularyItem, userId?: string) =
   }
 
   try {
+    const { id, user_id, ...payload } = updatedItem;
     const { error } = await supabase
       .from('vocabulary')
-      .update(updatedItem)
+      .update(payload)
       .eq('id', updatedItem.id);
 
     if (error) throw error;

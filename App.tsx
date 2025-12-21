@@ -117,15 +117,17 @@ const App: React.FC = () => {
 
       {/* Main Content Area */}
       <main className="flex-1 h-full overflow-hidden relative pb-16 md:pb-0">
-        <div className="absolute top-4 right-4 z-50">
-          <button
-            onClick={handleLogout}
-            className="p-2 bg-white rounded-full shadow-md text-slate-500 hover:text-red-600 transition-colors"
-            title="Sign Out"
-          >
-            <LogOut className="w-5 h-5" />
-          </button>
-        </div>
+        {currentPage === Page.DASHBOARD && (
+          <div className="absolute top-4 right-4 z-50">
+            <button
+              onClick={handleLogout}
+              className="p-2 bg-white rounded-full shadow-md text-slate-500 hover:text-red-600 transition-colors"
+              title="Sign Out"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
+          </div>
+        )}
         {renderPage()}
       </main>
     </div>
