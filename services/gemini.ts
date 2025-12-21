@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { ImageAnalysisResult } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
 
 export const generateExpressionContext = async (expression: string) => {
   try {
@@ -28,7 +28,7 @@ export const generateExpressionContext = async (expression: string) => {
         }
       }
     });
-    
+
     return JSON.parse(response.text || '{}');
   } catch (error) {
     console.error("Gemini Expression Error:", error);
@@ -73,7 +73,7 @@ export const analyzeImageForContext = async (base64Image: string, mimeType: stri
       },
       config: {
         responseMimeType: "application/json",
-         responseSchema: {
+        responseSchema: {
           type: Type.OBJECT,
           properties: {
             narrative: { type: Type.STRING },
@@ -99,13 +99,13 @@ export const generateSpeech = async (text: string, voiceName: string = 'Kore') =
       config: {
         responseModalities: [Modality.AUDIO],
         speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: voiceName },
-            },
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: voiceName },
+          },
         },
       },
     });
-    
+
     // Return the base64 encoded audio string
     return response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
   } catch (error) {
