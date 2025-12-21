@@ -6,13 +6,13 @@ CREATE TABLE vocabulary (
   definition TEXT NOT NULL,
   examples TEXT[] NOT NULL DEFAULT '{}',
   scenario TEXT NOT NULL,
-  createdAt BIGINT NOT NULL,
+  created_at BIGINT NOT NULL,
   
   -- SRS Properties
-  nextReviewDate BIGINT NOT NULL,
+  next_review_date BIGINT NOT NULL,
   interval INTEGER NOT NULL DEFAULT 0,
   repetition INTEGER NOT NULL DEFAULT 0,
-  easeFactor DOUBLE PRECISION NOT NULL DEFAULT 2.5
+  ease_factor DOUBLE PRECISION NOT NULL DEFAULT 2.5
 );
 
 -- Set up Row Level Security (RLS)

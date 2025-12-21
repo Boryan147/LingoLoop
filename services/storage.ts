@@ -7,8 +7,41 @@ export const generateId = () => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return crypto.randomUUID();
   }
-  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  // Robust UUID v4 fallback
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
 };
+
+const mapToSupabase = (item: VocabularyItem) => ({
+  id: item.id,
+  user_id: item.user_id,
+  expression: item.expression,
+  definition: item.definition,
+  examples: item.examples,
+  scenario: item.scenario,
+  created_at: item.createdAt,
+  next_review_date: item.nextReviewDate,
+  interval: item.interval,
+  repetition: item.repetition,
+  ease_factor: item.easeFactor,
+});
+
+const mapFromSupabase = (data: any): VocabularyItem => ({
+  id: data.id,
+  user_id: data.user_id,
+  expression: data.expression,
+  definition: data.definition,
+  examples: data.examples,
+  scenario: data.scenario,
+  createdAt: Number(data.created_at),
+  nextReviewDate: Number(data.next_review_date),
+  interval: data.interval,
+  repetition: data.repetition,
+  easeFactor: data.ease_factor,
+});
 
 // --- Local Storage Fallback ---
 export const getLocalItems = (): VocabularyItem[] => {
@@ -38,10 +71,10 @@ export const getItems = async (userId?: string): Promise<VocabularyItem[]> => {
       .from('vocabulary')
       .select('*')
       .eq('user_id', userId)
-      .order('createdAt', { ascending: false });
+      .order('created_at', { ascending: false });
 
     if (error) throw error;
-    return data || [];
+    return (data || []).map(mapFromSupabase);
   } catch (e) {
     console.error("Failed to load items from Supabase", e);
     return getLocalItems();
@@ -55,11 +88,15 @@ export const saveItem = async (item: VocabularyItem, userId?: string) => {
   }
 
   try {
+    const payload = mapToSupabase({ ...item, user_id: userId });
     const { error } = await supabase
       .from('vocabulary')
-      .upsert([{ ...item, user_id: userId }], { onConflict: 'id' });
+      .upsert([payload], { onConflict: 'id' });
 
-    if (error) throw error;
+    if (error) {
+      alert(`Sync Error: ${error.message}`);
+      throw error;
+    }
   } catch (e) {
     console.error("Failed to save item to Supabase", e);
     // Keep local as fallback but notify
@@ -79,14 +116,15 @@ export const updateItem = async (updatedItem: VocabularyItem, userId?: string) =
   }
 
   try {
-    const { ...payload } = updatedItem;
-    if (!payload.user_id) payload.user_id = userId;
-
+    const payload = mapToSupabase({ ...updatedItem, user_id: userId });
     const { error } = await supabase
       .from('vocabulary')
       .upsert([payload], { onConflict: 'id' });
 
-    if (error) throw error;
+    if (error) {
+      alert(`Update Error: ${error.message}`);
+      throw error;
+    }
   } catch (e) {
     console.error("Failed to update item in Supabase", e);
   }
@@ -97,7 +135,7 @@ export const syncLocalStorageToSupabase = async (userId: string) => {
   if (localItems.length === 0) return;
 
   try {
-    const itemsWithUserId = localItems.map(item => ({
+    const itemsWithUserId = localItems.map(item => mapToSupabase({
       ...item,
       user_id: userId
     }));
@@ -142,7 +180,7 @@ export const importBackup = async (jsonString: string, userId?: string): Promise
       const valid = items.every(i => i.id && i.expression && typeof i.repetition === 'number');
       if (valid) {
         if (userId) {
-          const itemsWithUserId = items.map(item => ({ ...item, user_id: userId }));
+          const itemsWithUserId = items.map(item => mapToSupabase({ ...item, user_id: userId }));
           const { error } = await supabase.from('vocabulary').upsert(itemsWithUserId);
           return !error;
         } else {
