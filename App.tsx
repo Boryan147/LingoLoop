@@ -60,8 +60,8 @@ const App: React.FC = () => {
     setStats(currentStats);
   };
 
-  const handleNavigate = (page: Page) => {
-    refreshData();
+  const handleNavigate = async (page: Page) => {
+    await refreshData();
     setCurrentPage(page);
   };
 

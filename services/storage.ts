@@ -3,6 +3,13 @@ import { supabase } from './supabase';
 
 const STORAGE_KEY = 'lingoloop_vocab';
 
+export const generateId = () => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+};
+
 // --- Local Storage Fallback ---
 export const getLocalItems = (): VocabularyItem[] => {
   try {
@@ -50,11 +57,12 @@ export const saveItem = async (item: VocabularyItem, userId?: string) => {
   try {
     const { error } = await supabase
       .from('vocabulary')
-      .insert([{ ...item, user_id: userId }]);
+      .upsert([{ ...item, user_id: userId }], { onConflict: 'id' });
 
     if (error) throw error;
   } catch (e) {
     console.error("Failed to save item to Supabase", e);
+    // Keep local as fallback but notify
     saveLocalItem(item);
   }
 };
@@ -71,11 +79,12 @@ export const updateItem = async (updatedItem: VocabularyItem, userId?: string) =
   }
 
   try {
-    const { id, user_id, ...payload } = updatedItem;
+    const { ...payload } = updatedItem;
+    if (!payload.user_id) payload.user_id = userId;
+
     const { error } = await supabase
       .from('vocabulary')
-      .update(payload)
-      .eq('id', updatedItem.id);
+      .upsert([payload], { onConflict: 'id' });
 
     if (error) throw error;
   } catch (e) {

@@ -25,17 +25,22 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
   }, [userId]);
 
   const handleRating = async (rating: number) => {
-    const currentItem = queue[currentIndex];
-    const updates = calculateNextReview(currentItem, rating);
-    const updatedItem = { ...currentItem, ...updates };
+    try {
+      const currentItem = queue[currentIndex];
+      const updates = calculateNextReview(currentItem, rating);
+      const updatedItem = { ...currentItem, ...updates };
 
-    await storage.updateItem(updatedItem, userId);
+      await storage.updateItem(updatedItem, userId);
 
-    if (currentIndex < queue.length - 1) {
-      setIsFlipped(false);
-      setTimeout(() => setCurrentIndex(prev => prev + 1), 150);
-    } else {
-      setCompleted(true);
+      if (currentIndex < queue.length - 1) {
+        setIsFlipped(false);
+        setTimeout(() => setCurrentIndex(prev => prev + 1), 150);
+      } else {
+        setCompleted(true);
+      }
+    } catch (err) {
+      alert("Failed to save progress. Please try again.");
+      console.error(err);
     }
   };
 
@@ -58,34 +63,23 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
     );
   };
 
-  if (queue.length === 0 && !completed) {
+  if ((queue.length === 0 && !completed) || completed) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center p-8">
+      <div className="flex flex-col items-center justify-center h-full text-center p-8 animate-in zoom-in-95 duration-300">
         <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-6">
           <PartyPopper className="w-10 h-10" />
         </div>
-        <h2 className="text-2xl font-bold text-slate-900 mb-2">All Caught Up!</h2>
-        <p className="text-slate-500 mb-8">You have no pending reviews for now.</p>
-        <button
-          onClick={onComplete}
-          className="px-6 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-700 transition-colors"
-        >
-          Back to Dashboard
-        </button>
-      </div>
-    );
-  }
-
-  if (completed) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full text-center p-8 animate-in zoom-in-95 duration-300">
-        <h2 className="text-3xl font-bold text-slate-900 mb-4">Session Complete!</h2>
-        <p className="text-slate-500 mb-8">You reviewed {queue.length} items.</p>
+        <h2 className="text-3xl font-bold text-slate-900 mb-2">
+          {completed ? "Session Complete!" : "All Caught Up!"}
+        </h2>
+        <p className="text-slate-500 mb-8">
+          {completed ? `You reviewed ${queue.length} items.` : "You have no pending reviews for now."}
+        </p>
         <button
           onClick={onComplete}
           className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200"
         >
-          Finish
+          {completed ? "Finish" : "Back to Dashboard"}
         </button>
       </div>
     );

@@ -27,7 +27,7 @@ const ExpressionManager: React.FC<ExpressionManagerProps> = ({ items, onUpdate, 
       const context = await generateExpressionContext(newExpression);
 
       const newItem: VocabularyItem = {
-        id: crypto.randomUUID(),
+        id: storage.generateId(),
         expression: newExpression,
         definition: context.definition,
         examples: context.examples,
