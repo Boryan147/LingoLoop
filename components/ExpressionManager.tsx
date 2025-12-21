@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { VocabularyItem } from '../types';
 import { generateExpressionContext } from '../services/gemini';
 import { getInitialSRSState as getSRS } from '../services/srs';
-import { Plus, Loader2, Book, Sparkles, AlertCircle, ExternalLink } from 'lucide-react';
+import { Plus, Loader2, Book, Sparkles, AlertCircle, ExternalLink, Trash2 } from 'lucide-react';
 import * as storage from '../services/storage';
 
 interface ExpressionManagerProps {
@@ -43,6 +43,17 @@ const ExpressionManager: React.FC<ExpressionManagerProps> = ({ items, onUpdate, 
       setError('Failed to generate context. Please check your API key or try again.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleDelete = async (itemId: string) => {
+    if (!window.confirm('Are you sure you want to delete this expression? This cannot be undone.')) return;
+
+    try {
+      await storage.deleteItem(itemId, userId);
+      onUpdate();
+    } catch (err) {
+      alert('Failed to delete expression. Please try again.');
     }
   };
 
@@ -123,6 +134,13 @@ const ExpressionManager: React.FC<ExpressionManagerProps> = ({ items, onUpdate, 
                   <span className="text-[10px] px-2 py-1 bg-slate-100 rounded text-slate-500 font-mono whitespace-nowrap">
                     Lvl {item.repetition}
                   </span>
+                  <button
+                    onClick={() => handleDelete(item.id)}
+                    className="p-1 px-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-all sm:opacity-0 group-hover:opacity-100"
+                    title="Delete Expression"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
               <p className="text-slate-600 text-sm italic mb-4 border-l-2 border-indigo-200 pl-3">{item.definition}</p>

@@ -130,6 +130,29 @@ export const updateItem = async (updatedItem: VocabularyItem, userId?: string) =
   }
 };
 
+export const deleteItem = async (itemId: string, userId?: string) => {
+  if (!userId) {
+    const items = getLocalItems();
+    const filteredItems = items.filter(i => i.id !== itemId);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(filteredItems));
+    return;
+  }
+
+  try {
+    const { error } = await supabase
+      .from('vocabulary')
+      .delete()
+      .eq('id', itemId);
+
+    if (error) {
+      alert(`Delete Error: ${error.message}`);
+      throw error;
+    }
+  } catch (e) {
+    console.error("Failed to delete item from Supabase", e);
+  }
+};
+
 export const syncLocalStorageToSupabase = async (userId: string) => {
   const localItems = getLocalItems();
   if (localItems.length === 0) return;
