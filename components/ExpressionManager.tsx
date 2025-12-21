@@ -132,7 +132,7 @@ const ExpressionManager: React.FC<ExpressionManagerProps> = ({ items, onUpdate, 
                     <span className="hidden md:inline">Dictionary</span> <ExternalLink className="w-3 h-3" />
                   </a>
                   <span className="text-[10px] px-2 py-1 bg-slate-100 rounded text-slate-500 font-mono whitespace-nowrap">
-                    Lvl {item.repetition}
+                    Rep {item.repetition}
                   </span>
                   <button
                     onClick={() => handleDelete(item.id)}
