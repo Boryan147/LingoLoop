@@ -47,3 +47,27 @@ export const getStats = () => {
     streak: 3 // Mock streak for demo
   };
 };
+
+// --- Backup & Restore Features ---
+
+export const exportBackup = (): string => {
+  return JSON.stringify(getItems(), null, 2);
+};
+
+export const importBackup = (jsonString: string): boolean => {
+  try {
+    const items = JSON.parse(jsonString);
+    if (Array.isArray(items)) {
+      // Basic validation to ensure it looks like our data
+      const valid = items.every(i => i.id && i.expression && typeof i.repetition === 'number');
+      if (valid) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+        return true;
+      }
+    }
+    return false;
+  } catch (e) {
+    console.error("Import failed", e);
+    return false;
+  }
+};

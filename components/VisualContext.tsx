@@ -10,6 +10,37 @@ interface VisualContextProps {
 
 const VOICES = ['Kore', 'Puck', 'Charon', 'Fenrir', 'Zephyr'];
 
+// Utility to compress high-res mobile photos before sending to API
+const compressImage = (base64Str: string, maxWidth = 800): Promise<string> => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.src = base64Str;
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
+
+      // Calculate new dimensions
+      if (width > maxWidth) {
+        height = Math.round((height * maxWidth) / width);
+        width = maxWidth;
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          // Export as JPEG with 0.7 quality
+          resolve(canvas.toDataURL('image/jpeg', 0.7));
+      } else {
+          resolve(base64Str); // Fallback
+      }
+    };
+    img.onerror = () => resolve(base64Str); // Fallback
+  });
+};
+
 const VisualContext: React.FC<VisualContextProps> = ({ onVocabularyAdded }) => {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [result, setResult] = useState<ImageAnalysisResult | null>(null);
@@ -24,6 +55,7 @@ const VisualContext: React.FC<VisualContextProps> = ({ onVocabularyAdded }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
+  const resultRef = useRef<HTMLDivElement>(null);
 
   // Cleanup audio context on unmount
   useEffect(() => {
@@ -34,6 +66,16 @@ const VisualContext: React.FC<VisualContextProps> = ({ onVocabularyAdded }) => {
       }
     };
   }, []);
+
+  // Auto-scroll to results on mobile when analysis finishes
+  useEffect(() => {
+    if (result && resultRef.current) {
+      // Small timeout to allow DOM to render
+      setTimeout(() => {
+        resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    }
+  }, [result]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -54,21 +96,25 @@ const VisualContext: React.FC<VisualContextProps> = ({ onVocabularyAdded }) => {
     setIsAnalyzing(true);
     stopAudio();
     
-    // Extract base64 data and mime type
-    const matches = imagePreview.match(/^data:(.+);base64,(.+)$/);
-    if (!matches || matches.length !== 3) {
-      setIsAnalyzing(false);
-      return;
-    }
-    
-    const mimeType = matches[1];
-    const base64Data = matches[2];
-
     try {
+      // Compress image before sending to prevent payload size errors on mobile
+      const compressedImage = await compressImage(imagePreview);
+
+      // Extract base64 data and mime type
+      const matches = compressedImage.match(/^data:(.+);base64,(.+)$/);
+      if (!matches || matches.length !== 3) {
+        setIsAnalyzing(false);
+        return;
+      }
+      
+      const mimeType = matches[1];
+      const base64Data = matches[2];
+
       const analysis = await analyzeImageForContext(base64Data, mimeType);
       setResult(analysis);
     } catch (error) {
-      alert("Failed to analyze image. Please try again.");
+      console.error(error);
+      alert("Failed to analyze image. It might be too large or the network connection is unstable.");
     } finally {
       setIsAnalyzing(false);
     }
@@ -126,8 +172,6 @@ const VisualContext: React.FC<VisualContextProps> = ({ onVocabularyAdded }) => {
       }
 
       // Decode raw PCM
-      // The API returns raw PCM (16-bit signed integer), not a WAV file.
-      // We need to manually convert it to an AudioBuffer.
       const arrayBuffer = decodeBase64ToArrayBuffer(base64Audio);
       const dataView = new DataView(arrayBuffer);
       const numChannels = 1;
@@ -162,21 +206,26 @@ const VisualContext: React.FC<VisualContextProps> = ({ onVocabularyAdded }) => {
   };
 
   return (
-    <div className="h-full flex flex-col md:flex-row bg-slate-50 overflow-hidden">
+    // Changed h-full to be conditional. Mobile: scrollable vertically. Desktop: h-full with split scrolling.
+    <div className="h-full flex flex-col md:flex-row bg-slate-50 overflow-y-auto md:overflow-hidden">
+      
       {/* Left Panel: Image & Upload */}
-      <div className="w-full md:w-1/2 p-6 flex flex-col border-r border-slate-200 h-full overflow-y-auto">
+      {/* Reduced min-height on mobile to ensure analyze button is easily reachable */}
+      <div className="w-full md:w-1/2 p-4 md:p-6 flex flex-col border-b md:border-b-0 md:border-r border-slate-200 shrink-0 md:h-full md:overflow-y-auto">
         <h2 className="text-2xl font-bold text-slate-900 mb-6 flex items-center gap-2">
             <Camera className="text-indigo-600" /> Think in English
         </h2>
         
         <div 
-            className={`flex-1 min-h-[300px] border-2 border-dashed rounded-2xl flex flex-col items-center justify-center relative bg-white transition-all
-            ${imagePreview ? 'border-slate-300' : 'border-indigo-300 hover:bg-indigo-50 cursor-pointer'}`}
+            className={`
+              w-full min-h-[250px] md:min-h-[300px] border-2 border-dashed rounded-2xl flex flex-col items-center justify-center relative bg-white transition-all
+              ${imagePreview ? 'border-slate-300' : 'border-indigo-300 hover:bg-indigo-50 cursor-pointer'}
+            `}
             onClick={() => !imagePreview && fileInputRef.current?.click()}
         >
           {imagePreview ? (
             <>
-                <img src={imagePreview} alt="Uploaded context" className="max-h-full max-w-full object-contain p-2" />
+                <img src={imagePreview} alt="Uploaded context" className="max-h-[300px] md:max-h-full max-w-full object-contain p-2" />
                 <button 
                     onClick={(e) => {
                         e.stopPropagation();
@@ -201,6 +250,7 @@ const VisualContext: React.FC<VisualContextProps> = ({ onVocabularyAdded }) => {
           <input 
             type="file" 
             accept="image/*" 
+            capture="environment"
             ref={fileInputRef} 
             className="hidden" 
             onChange={handleImageUpload} 
@@ -225,9 +275,12 @@ const VisualContext: React.FC<VisualContextProps> = ({ onVocabularyAdded }) => {
       </div>
 
       {/* Right Panel: Result */}
-      <div className="w-full md:w-1/2 p-6 bg-white h-full overflow-y-auto">
+      <div 
+        ref={resultRef}
+        className="w-full md:w-1/2 p-4 md:p-6 bg-white md:h-full md:overflow-y-auto pb-24 md:pb-6"
+      >
         {!result && !isAnalyzing && (
-            <div className="h-full flex flex-col items-center justify-center text-center opacity-40 p-10">
+            <div className="hidden md:flex flex-col items-center justify-center text-center opacity-40 p-10 h-full">
                 <Sparkles className="w-16 h-16 text-slate-300 mb-4" />
                 <h3 className="text-xl font-semibold text-slate-800">Ready to Learn</h3>
                 <p className="text-slate-500 mt-2">Upload an image to see how to describe it in English.</p>
@@ -235,7 +288,7 @@ const VisualContext: React.FC<VisualContextProps> = ({ onVocabularyAdded }) => {
         )}
 
         {isAnalyzing && (
-             <div className="space-y-6 animate-pulse">
+             <div className="space-y-6 animate-pulse mt-4 md:mt-0">
                 <div className="h-4 bg-slate-200 rounded w-1/4"></div>
                 <div className="space-y-3">
                     <div className="h-3 bg-slate-100 rounded w-full"></div>
@@ -247,13 +300,13 @@ const VisualContext: React.FC<VisualContextProps> = ({ onVocabularyAdded }) => {
         )}
 
         {result && (
-            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="mb-8">
-                    <div className="flex justify-between items-center mb-4">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-2">
                         <span className="text-xs font-bold text-indigo-500 uppercase tracking-widest block">Internal Monologue</span>
                         
                         {/* Audio Controls */}
-                        <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-lg">
+                        <div className="flex w-full md:w-auto items-center gap-2 bg-slate-100 p-1 rounded-lg">
                            <select 
                              value={selectedVoice}
                              onChange={(e) => {
@@ -261,7 +314,7 @@ const VisualContext: React.FC<VisualContextProps> = ({ onVocabularyAdded }) => {
                                setSelectedVoice(e.target.value);
                              }}
                              disabled={isPlaying || isGeneratingAudio}
-                             className="bg-white text-xs font-medium text-slate-600 py-1 px-2 rounded-md border border-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                             className="flex-1 md:flex-none bg-white text-xs font-medium text-slate-600 py-2 md:py-1 px-2 rounded-md border border-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                            >
                               {VOICES.map(v => <option key={v} value={v}>{v}</option>)}
                            </select>
@@ -269,7 +322,7 @@ const VisualContext: React.FC<VisualContextProps> = ({ onVocabularyAdded }) => {
                            <button
                              onClick={handlePlayAudio}
                              disabled={isGeneratingAudio}
-                             className={`p-1.5 rounded-md transition-all ${
+                             className={`p-2 md:p-1.5 rounded-md transition-all ${
                                isPlaying 
                                  ? 'bg-red-100 text-red-600 hover:bg-red-200' 
                                  : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm'
@@ -290,10 +343,12 @@ const VisualContext: React.FC<VisualContextProps> = ({ onVocabularyAdded }) => {
                     </div>
                     
                     {/* Interactive Narrative Component */}
-                    <InteractiveNarrative 
-                        text={result.narrative} 
-                        onVocabularyAdded={() => onVocabularyAdded && onVocabularyAdded()} 
-                    />
+                    <div className="bg-slate-50/50 rounded-xl p-2 md:p-0">
+                      <InteractiveNarrative 
+                          text={result.narrative} 
+                          onVocabularyAdded={() => onVocabularyAdded && onVocabularyAdded()} 
+                      />
+                    </div>
                 </div>
 
                 <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100">

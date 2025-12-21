@@ -54,9 +54,13 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen bg-slate-50 font-sans text-slate-900">
+    <div className="flex flex-col md:flex-row h-screen bg-slate-50 font-sans text-slate-900 overflow-hidden">
+      {/* Navigation - Sidebar on desktop, Bottom bar on mobile */}
       <Navbar currentPage={currentPage} onNavigate={handleNavigate} />
-      <main className="flex-1 h-full overflow-hidden relative">
+      
+      {/* Main Content Area */}
+      {/* pb-20 adds padding at the bottom so mobile nav doesn't cover content */}
+      <main className="flex-1 h-full overflow-hidden relative pb-16 md:pb-0">
         {renderPage()}
       </main>
     </div>
