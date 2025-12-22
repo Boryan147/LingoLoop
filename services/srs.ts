@@ -1,8 +1,9 @@
 import { VocabularyItem } from '../types';
 
 // Implementation of Spaced Repetition based on Ebbinghaus Forgetting Curve intervals
-// The specific intervals (1d, 2d, 6d, 31d) aim to interrupt the forgetting process at critical drop-off points.
-const EBBINGHAUS_INTERVALS = [1, 2, 6, 31];
+// The specific intervals (1d, 2d, 3d, 5d, 8d, 14d, 30d, 60d, 90d, 120d, 150d, 180d) 
+// aim to interrupt the forgetting process at critical drop-off points and ensure long-term retention.
+const EBBINGHAUS_INTERVALS = [1, 2, 3, 5, 8, 14, 30, 60, 90, 120, 150, 180];
 
 export const calculateNextReview = (
   item: VocabularyItem,
