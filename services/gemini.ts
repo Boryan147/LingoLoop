@@ -11,6 +11,9 @@ export const generateExpressionContext = async (expression: string) => {
       Return a JSON object strictly matching this schema:
       {
         "definition": "Clear and concise definition in English",
+        "partOfSpeech": "e.g., noun, verb, adjective, phrase",
+        "phonetic": "International Phonetic Alphabet (IPA) representation",
+        "verbForms": "For verbs, include forms like 'do, did, done'. For non-verbs, leave as empty string or omit.",
         "examples": ["Sentence 1", "Sentence 2", "Sentence 3", "Sentence 4"],
         "scenario": "A short, engaging paragraph (approx 3-4 sentences) describing a realistic daily life situation where this expression is used naturally."
       }
@@ -21,10 +24,13 @@ export const generateExpressionContext = async (expression: string) => {
           type: Type.OBJECT,
           properties: {
             definition: { type: Type.STRING },
+            partOfSpeech: { type: Type.STRING },
+            phonetic: { type: Type.STRING },
+            verbForms: { type: Type.STRING },
             examples: { type: Type.ARRAY, items: { type: Type.STRING } },
             scenario: { type: Type.STRING },
           },
-          required: ["definition", "examples", "scenario"],
+          required: ["definition", "partOfSpeech", "phonetic", "examples", "scenario"],
         }
       }
     });

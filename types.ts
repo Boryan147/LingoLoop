@@ -9,6 +9,9 @@ export interface VocabularyItem {
   id: string;
   expression: string;
   definition: string;
+  partOfSpeech: string;
+  phonetic: string;
+  verbForms?: string;
   examples: string[];
   scenario: string;
   user_id?: string;

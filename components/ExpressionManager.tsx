@@ -30,6 +30,9 @@ const ExpressionManager: React.FC<ExpressionManagerProps> = ({ items, onUpdate, 
         id: storage.generateId(),
         expression: newExpression,
         definition: context.definition,
+        partOfSpeech: context.partOfSpeech,
+        phonetic: context.phonetic,
+        verbForms: context.verbForms,
         examples: context.examples,
         scenario: context.scenario,
         createdAt: Date.now(),
@@ -117,10 +120,23 @@ const ExpressionManager: React.FC<ExpressionManagerProps> = ({ items, onUpdate, 
             <p className="text-lg text-slate-400">Your bank is empty. Add an expression above!</p>
           </div>
         ) : (
-          items.slice().reverse().map((item) => (
+          items.map((item) => (
             <div key={item.id} className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-indigo-300 transition-colors group">
-              <div className="flex justify-between items-start mb-3 gap-2">
-                <h3 className="text-lg md:text-xl font-bold text-slate-800 leading-tight">{item.expression}</h3>
+              <div className="flex justify-between items-start mb-2 gap-2">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3 className="text-lg md:text-xl font-bold text-slate-800 leading-tight">{item.expression}</h3>
+                    {item.partOfSpeech && (
+                      <span className="text-[10px] px-1.5 py-0.5 bg-indigo-100 text-indigo-600 rounded font-bold uppercase">
+                        {item.partOfSpeech}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-400 text-xs mb-2">
+                    {item.phonetic && <span className="font-serif">{item.phonetic}</span>}
+                    {item.verbForms && <span className="italic">({item.verbForms})</span>}
+                  </div>
+                </div>
                 <div className="flex flex-wrap justify-end gap-2 shrink-0">
                   <a
                     href={`https://dictionary.cambridge.org/dictionary/english/${item.expression.replace(/\s+/g, '-').toLowerCase()}`}

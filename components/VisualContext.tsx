@@ -67,6 +67,31 @@ const VisualContext: React.FC<VisualContextProps> = ({ onVocabularyAdded, userId
     };
   }, []);
 
+  // Persistence: Load on mount
+  useEffect(() => {
+    const savedImage = localStorage.getItem('visual_context_image');
+    const savedResult = localStorage.getItem('visual_context_result');
+    if (savedImage) setImagePreview(savedImage);
+    if (savedResult) setResult(JSON.parse(savedResult));
+  }, []);
+
+  // Persistence: Save on change
+  useEffect(() => {
+    if (imagePreview) {
+      localStorage.setItem('visual_context_image', imagePreview);
+    } else {
+      localStorage.removeItem('visual_context_image');
+    }
+  }, [imagePreview]);
+
+  useEffect(() => {
+    if (result) {
+      localStorage.setItem('visual_context_result', JSON.stringify(result));
+    } else {
+      localStorage.removeItem('visual_context_result');
+    }
+  }, [result]);
+
   // Auto-scroll to results on mobile when analysis finishes
   useEffect(() => {
     if (result && resultRef.current) {
