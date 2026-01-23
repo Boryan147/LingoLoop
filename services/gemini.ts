@@ -119,3 +119,55 @@ export const generateSpeech = async (text: string, voiceName: string = 'Kore') =
     throw new Error("Failed to generate speech.");
   }
 };
+
+export const generateScenarioExpressions = async (scenario: string) => {
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: `For the following real-life scenario: "${scenario}", provide a list of 5-8 key English expressions, idioms, or phrases that are most commonly used and essential for the person in that situation.
+      Return a JSON array of objects strictly matching this schema:
+      {
+        "expressions": [
+          {
+            "expression": "The phrase",
+            "definition": "Clear and concise definition in English",
+            "partOfSpeech": "phrase, idiom, etc.",
+            "phonetic": "IPA representation",
+            "verbForms": "Only if applicable",
+            "examples": ["Sentence 1", "Sentence 2"]
+          }
+        ]
+      }`,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            expressions: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  expression: { type: Type.STRING },
+                  definition: { type: Type.STRING },
+                  partOfSpeech: { type: Type.STRING },
+                  phonetic: { type: Type.STRING },
+                  verbForms: { type: Type.STRING },
+                  examples: { type: Type.ARRAY, items: { type: Type.STRING } },
+                },
+                required: ["expression", "definition", "partOfSpeech", "phonetic", "examples"],
+              }
+            }
+          },
+          required: ["expressions"],
+        }
+      }
+    });
+
+    const parsed = JSON.parse(response.text || '{}');
+    return parsed.expressions || [];
+  } catch (error) {
+    console.error("Gemini Scenario Error:", error);
+    throw new Error("Failed to generate scenario expressions.");
+  }
+};

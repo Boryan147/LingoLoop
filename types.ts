@@ -3,6 +3,7 @@ export enum Page {
   EXPRESSIONS = 'EXPRESSIONS',
   VISUAL_CONTEXT = 'VISUAL_CONTEXT',
   REVIEW = 'REVIEW',
+  SCENARIO = 'SCENARIO',
 }
 
 export interface VocabularyItem {
@@ -22,6 +23,17 @@ export interface VocabularyItem {
   interval: number; // Days
   repetition: number;
   easeFactor: number;
+}
+
+export interface Scenario {
+  id: string;
+  user_id: string;
+  title: string;
+  createdAt: number;
+}
+
+export interface ScenarioVocabularyItem extends Omit<VocabularyItem, 'scenario'> {
+  scenario_id: string;
 }
 
 export interface ImageAnalysisResult {

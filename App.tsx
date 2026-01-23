@@ -5,6 +5,7 @@ import ExpressionManager from './components/ExpressionManager';
 import VisualContext from './components/VisualContext';
 import ReviewSession from './components/ReviewSession';
 import Auth from './components/Auth';
+import ScenarioGenerator from './components/ScenarioGenerator';
 import { Page, VocabularyItem, StudyStats } from './types';
 import * as storage from './services/storage';
 import { supabase } from './services/supabase';
@@ -105,6 +106,8 @@ const App: React.FC = () => {
         return <VisualContext onVocabularyAdded={() => refreshData()} userId={session.user.id} />;
       case Page.REVIEW:
         return <ReviewSession onComplete={() => handleNavigate(Page.DASHBOARD)} userId={session.user.id} />;
+      case Page.SCENARIO:
+        return <ScenarioGenerator userId={session.user.id} />;
       default:
         return <Dashboard stats={stats} onReviewStart={() => handleNavigate(Page.REVIEW)} />;
     }

@@ -1,4 +1,4 @@
-import { VocabularyItem } from '../types';
+import { VocabularyItem, Scenario, ScenarioVocabularyItem } from '../types';
 import { supabase } from './supabase';
 
 const STORAGE_KEY = 'lingoloop_vocab';
@@ -48,6 +48,32 @@ const mapFromSupabase = (data: any): VocabularyItem => ({
   repetition: data.repetition,
   easeFactor: data.ease_factor,
 });
+
+const mapScenarioFromSupabase = (data: any): Scenario => ({
+  id: data.id,
+  user_id: data.user_id,
+  title: data.title,
+  createdAt: Number(data.created_at),
+});
+
+const mapScenarioVocabToSupabase = (item: ScenarioVocabularyItem) => ({
+  ...mapToSupabase({ ...item, scenario: '' } as any),
+  scenario_id: item.scenario_id,
+});
+
+// Helper to remove extra fields that don't belong in scenario_vocabulary
+const cleanScenarioVocabPayload = (payload: any) => {
+  const { scenario, ...rest } = payload;
+  return rest;
+};
+
+const mapScenarioVocabFromSupabase = (data: any): ScenarioVocabularyItem => {
+  const { scenario, ...item } = mapFromSupabase(data);
+  return {
+    ...item,
+    scenario_id: data.scenario_id,
+  };
+};
 
 // --- Local Storage Fallback ---
 export const getLocalItems = (): VocabularyItem[] => {
@@ -222,5 +248,104 @@ export const importBackup = async (jsonString: string, userId?: string): Promise
   } catch (e) {
     console.error("Import failed", e);
     return false;
+  }
+};
+
+// --- Scenario Storage ---
+
+export const getScenarios = async (userId: string): Promise<Scenario[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('scenarios')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return (data || []).map(mapScenarioFromSupabase);
+  } catch (e) {
+    console.error("Failed to load scenarios", e);
+    return [];
+  }
+};
+
+export const getScenarioVocabulary = async (userId: string, scenarioId: string): Promise<ScenarioVocabularyItem[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('scenario_vocabulary')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('scenario_id', scenarioId)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    return (data || []).map(mapScenarioVocabFromSupabase);
+  } catch (e) {
+    console.error("Failed to load scenario vocabulary", e);
+    return [];
+  }
+};
+
+export const saveScenarioWithExpressions = async (
+  userId: string,
+  title: string,
+  expressions: Omit<ScenarioVocabularyItem, 'id' | 'user_id' | 'scenario_id' | 'createdAt' | 'nextReviewDate' | 'interval' | 'repetition' | 'easeFactor'>[]
+) => {
+  try {
+    // 1. Save Scenario
+    const scenarioId = generateId();
+    const scenarioPayload = {
+      id: scenarioId,
+      user_id: userId,
+      title: title,
+      created_at: Date.now(),
+    };
+
+    const { error: scenarioError } = await supabase
+      .from('scenarios')
+      .insert([scenarioPayload]);
+
+    if (scenarioError) throw scenarioError;
+
+    // 2. Save Expressions
+    const vocabPayloads = expressions.map(exp => {
+      const fullItem: ScenarioVocabularyItem = {
+        ...exp,
+        id: generateId(),
+        user_id: userId,
+        scenario_id: scenarioId,
+        createdAt: Date.now(),
+        nextReviewDate: Date.now(),
+        interval: 0,
+        repetition: 0,
+        easeFactor: 2.5,
+      };
+      return cleanScenarioVocabPayload(mapScenarioVocabToSupabase(fullItem));
+    });
+
+    const { error: vocabError } = await supabase
+      .from('scenario_vocabulary')
+      .insert(vocabPayloads);
+
+    if (vocabError) throw vocabError;
+
+    return scenarioId;
+  } catch (e) {
+    console.error("Failed to save scenario and expressions", e);
+    throw e;
+  }
+};
+
+export const deleteScenario = async (scenarioId: string) => {
+  try {
+    const { error } = await supabase
+      .from('scenarios')
+      .delete()
+      .eq('id', scenarioId);
+
+    if (error) throw error;
+  } catch (e) {
+    console.error("Failed to delete scenario", e);
+    throw e;
   }
 };
