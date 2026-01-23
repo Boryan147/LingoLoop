@@ -182,19 +182,21 @@ const ScenarioGenerator: React.FC<ScenarioGeneratorProps> = ({ userId }) => {
         }
 
         .scenario-sidebar {
-          background: rgba(255, 255, 255, 0.05);
+          background: #fff;
           border-radius: 12px;
           padding: 1.5rem;
           display: flex;
           flex-direction: column;
-          border: 1px solid rgba(255, 255, 255, 0.1);
+          border: 1px solid #e2e8f0;
           overflow-y: auto;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
 
         .scenario-sidebar h3 {
           margin-bottom: 1.5rem;
           font-size: 1.1rem;
-          color: #fff;
+          color: #0f172a;
+          font-weight: 700;
         }
 
         .scenario-list {
@@ -205,32 +207,33 @@ const ScenarioGenerator: React.FC<ScenarioGeneratorProps> = ({ userId }) => {
 
         .scenario-card {
           padding: 1rem;
-          background: rgba(255, 255, 255, 0.03);
+          background: #f8fafc;
           border-radius: 8px;
           cursor: pointer;
           transition: all 0.2s;
-          border: 1px solid transparent;
+          border: 1px solid #e2e8f0;
         }
 
         .scenario-card:hover {
-          background: rgba(255, 255, 255, 0.07);
+          background: #f1f5f9;
         }
 
         .scenario-card.active {
-          background: rgba(100, 108, 255, 0.1);
-          border-color: #646cff;
+          background: #eef2ff;
+          border-color: #6366f1;
         }
 
         .scenario-card-header {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.4rem;
         }
 
         .scenario-title {
-          font-weight: 500;
-          color: #eee;
+          font-weight: 600;
+          color: #1e293b;
+          font-size: 0.95rem;
           display: -webkit-box;
           -webkit-line-clamp: 2;
           -webkit-box-orient: vertical;
@@ -238,14 +241,14 @@ const ScenarioGenerator: React.FC<ScenarioGeneratorProps> = ({ userId }) => {
         }
 
         .scenario-date {
-          font-size: 0.8rem;
-          color: #888;
+          font-size: 0.75rem;
+          color: #64748b;
         }
 
         .delete-btn {
             background: none;
             border: none;
-            color: #888;
+            color: #94a3b8;
             font-size: 1.2rem;
             cursor: pointer;
             padding: 0 0.2rem;
@@ -253,7 +256,7 @@ const ScenarioGenerator: React.FC<ScenarioGeneratorProps> = ({ userId }) => {
         }
 
         .delete-btn:hover {
-            color: #ff4d4d;
+            color: #ef4444;
         }
 
         .scenario-main {
@@ -266,11 +269,14 @@ const ScenarioGenerator: React.FC<ScenarioGeneratorProps> = ({ userId }) => {
 
         .scenario-input-section h2 {
           margin-bottom: 0.5rem;
+          color: #0f172a;
+          font-weight: 700;
         }
 
         .subtitle {
-          color: #888;
+          color: #475569;
           margin-bottom: 1.5rem;
+          line-height: 1.5;
         }
 
         .input-group {
@@ -282,31 +288,34 @@ const ScenarioGenerator: React.FC<ScenarioGeneratorProps> = ({ userId }) => {
         textarea {
           width: 100%;
           min-height: 120px;
-          background: rgba(0, 0, 0, 0.2);
-          border: 1px solid rgba(255, 255, 255, 0.1);
+          background: #fff;
+          border: 1px solid #cbd5e1;
           border-radius: 8px;
           padding: 1rem;
-          color: #fff;
+          color: #1e293b;
           font-family: inherit;
           resize: vertical;
+          box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.05);
         }
 
         textarea:focus {
           outline: none;
-          border-color: #646cff;
+          border-color: #6366f1;
+          ring: 2px solid #6366f1;
         }
 
         .generate-btn {
-          background: #646cff;
+          background: #6366f1;
           color: white;
           padding: 0.8rem 1.5rem;
           border-radius: 8px;
           font-weight: 600;
-          transition: transform 0.1s;
+          transition: all 0.2s;
         }
 
         .generate-btn:hover:not(:disabled) {
-          background: #747bff;
+          background: #4f46e5;
+          transform: translateY(-1px);
         }
 
         .generate-btn:disabled {
@@ -325,13 +334,24 @@ const ScenarioGenerator: React.FC<ScenarioGeneratorProps> = ({ userId }) => {
           justify-content: space-between;
           align-items: center;
         }
+        
+        .results-header h3 {
+          color: #0f172a;
+          font-weight: 700;
+        }
 
         .save-btn {
           background: #10b981;
           color: white;
-          padding: 0.5rem 1rem;
+          padding: 0.5rem 1.2rem;
           border-radius: 6px;
           font-size: 0.9rem;
+          font-weight: 600;
+          transition: all 0.2s;
+        }
+        
+        .save-btn:hover {
+          background: #059669;
         }
 
         .results-grid {
@@ -341,10 +361,11 @@ const ScenarioGenerator: React.FC<ScenarioGeneratorProps> = ({ userId }) => {
         }
 
         .expression-preview-card {
-          background: rgba(255, 255, 255, 0.03);
-          border-radius: 10px;
-          padding: 1.25rem;
-          border: 1px solid rgba(255, 255, 255, 0.05);
+          background: #fff;
+          border-radius: 12px;
+          padding: 1.5rem;
+          border: 1px solid #e2e8f0;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
         }
 
         .exp-header {
@@ -355,40 +376,43 @@ const ScenarioGenerator: React.FC<ScenarioGeneratorProps> = ({ userId }) => {
         }
 
         .exp-header strong {
-          font-size: 1.1rem;
-          color: #646cff;
+          font-size: 1.15rem;
+          color: #4f46e5;
         }
 
         .phonetic {
           font-size: 0.85rem;
-          color: #888;
+          color: #64748b;
+          font-family: monospace;
         }
 
         .definition {
           font-size: 0.95rem;
-          color: #ddd;
-          margin-bottom: 1rem;
-          line-height: 1.4;
+          color: #334155;
+          margin-bottom: 1.25rem;
+          line-height: 1.5;
         }
 
         .examples {
           display: flex;
           flex-direction: column;
-          gap: 0.5rem;
-          border-top: 1px solid rgba(255, 255, 255, 0.05);
-          padding-top: 0.75rem;
+          gap: 0.6rem;
+          border-top: 1px solid #f1f5f9;
+          padding-top: 1rem;
         }
 
         .example {
           font-size: 0.85rem;
-          color: #aaa;
+          color: #64748b;
           font-style: italic;
+          line-height: 1.4;
         }
 
         .empty-msg {
           text-align: center;
-          color: #666;
+          color: #94a3b8;
           margin-top: 2rem;
+          font-size: 0.9rem;
         }
 
         .animate-fade-in {
