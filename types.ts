@@ -11,6 +11,7 @@ export interface Synonym {
   word: string;
   intensity: number;
   formality: number;
+  nuance?: string;
 }
 
 export interface Collocations {

@@ -15,11 +15,11 @@ export const generateExpressionContext = async (expression: string) => {
         "phonetic": "International Phonetic Alphabet (IPA) representation",
         "verbForms": "For verbs, include forms like 'do, did, done'. For non-verbs, leave as empty string or omit.",
         "examples": ["Sentence 1", "Sentence 2", "Sentence 3", "Sentence 4"],
-        "synonyms": [{"word": "synonym 1", "intensity": 1-10, "formality": 1-10}],
+        "synonyms": [{"word": "synonym 1", "intensity": 1-10, "formality": 1-10, "nuance": "Brief explanation of when to use this properly (e.g., medical contexts, formal writing)."}],
         "collocations": {"verbs": ["verb1", "verb2"], "adjectives": ["adj1", "adj2"]},
         "scenario": "A short, engaging paragraph (approx 3-4 sentences) describing a realistic daily life situation where this expression is used naturally."
       }
-      IMPORTANT: Provide at least 3-4 distinct example sentences demonstrating different usages if possible. Ensure synonyms are graded (intensity and formality from 1-10).`,
+      IMPORTANT: Provide at least 3-4 distinct example sentences demonstrating different usages if possible. Ensure synonyms are graded (intensity and formality from 1-10) and include a nuance usage tip.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -34,8 +34,8 @@ export const generateExpressionContext = async (expression: string) => {
               type: Type.ARRAY, 
               items: { 
                 type: Type.OBJECT, 
-                properties: { word: { type: Type.STRING }, intensity: { type: Type.INTEGER }, formality: { type: Type.INTEGER } },
-                required: ["word", "intensity", "formality"] 
+                properties: { word: { type: Type.STRING }, intensity: { type: Type.INTEGER }, formality: { type: Type.INTEGER }, nuance: { type: Type.STRING } },
+                required: ["word", "intensity", "formality", "nuance"] 
               } 
             },
             collocations: { 
@@ -243,5 +243,35 @@ export const generateScenarioExpressions = async (scenario: string) => {
   } catch (error: any) {
     console.error("Gemini Audio Feedback Error:", error?.message || error);
     throw new Error("Failed to analyze audio.");
+  }
+};
+
+export const evaluateSentence = async (expression: string, sentence: string) => {
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: `Evaluate the user's sentence for the proper usage of the expression "${expression}".
+      User's sentence: "${sentence}"
+      Return a JSON object with:
+      1. "isCorrect": boolean (true if the expression is used correctly and the sentence is grammatically correct).
+      2. "feedback": string (A brief explanation of why it's right or wrong. If wrong, provide a corrected version of their sentence).
+      `,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            isCorrect: { type: Type.BOOLEAN },
+            feedback: { type: Type.STRING },
+          },
+          required: ["isCorrect", "feedback"],
+        }
+      }
+    });
+
+    return JSON.parse(response.text || '{}');
+  } catch (error) {
+    console.error("Gemini Evaluate Sentence Error:", error);
+    throw new Error("Failed to evaluate sentence.");
   }
 };
