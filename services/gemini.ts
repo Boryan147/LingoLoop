@@ -187,11 +187,11 @@ export const generateScenarioExpressions = async (scenario: string) => {
   }
 };
 
-export const analyzeAudioFeedback = async (base64Audio: string, mimeType: string) => {
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-1.5-flash',
-      contents: {
+  export const analyzeAudioFeedback = async (base64Audio: string, mimeType: string) => {
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: {
         parts: [
           {
             inlineData: {
@@ -240,8 +240,8 @@ export const analyzeAudioFeedback = async (base64Audio: string, mimeType: string
     });
 
     return JSON.parse(response.text || '{}');
-  } catch (error) {
-    console.error("Gemini Audio Feedback Error:", error);
+  } catch (error: any) {
+    console.error("Gemini Audio Feedback Error:", error?.message || error);
     throw new Error("Failed to analyze audio.");
   }
 };

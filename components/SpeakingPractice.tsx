@@ -27,7 +27,11 @@ const SpeakingPractice: React.FC = () => {
       };
 
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const actualMimeType = mediaRecorderRef.current?.mimeType || 'audio/webm';
+        // Gemini API expects "audio/webm" without the ";codecs=opus" part
+        const cleanMimeType = actualMimeType.split(';')[0] || 'audio/webm';
+        
+        const audioBlob = new Blob(audioChunksRef.current, { type: cleanMimeType });
         const url = URL.createObjectURL(audioBlob);
         setAudioUrl(url);
 
@@ -37,7 +41,7 @@ const SpeakingPractice: React.FC = () => {
         reader.onloadend = async () => {
           const base64data = reader.result?.toString().split(',')[1];
           if (base64data) {
-            await handleAnalyze(base64data, 'audio/webm');
+            await handleAnalyze(base64data, cleanMimeType);
           }
         };
       };
