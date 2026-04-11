@@ -34,6 +34,8 @@ const ExpressionManager: React.FC<ExpressionManagerProps> = ({ items, onUpdate, 
         phonetic: context.phonetic,
         verbForms: context.verbForms,
         examples: context.examples,
+        synonyms: context.synonyms,
+        collocations: context.collocations,
         scenario: context.scenario,
         createdAt: Date.now(),
         ...getSRS(),
@@ -139,6 +141,15 @@ const ExpressionManager: React.FC<ExpressionManagerProps> = ({ items, onUpdate, 
                 </div>
                 <div className="flex flex-wrap justify-end gap-2 shrink-0">
                   <a
+                    href={`https://youglish.com/pronounce/${item.expression.replace(/\s+/g, '+')}/english`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-rose-500 hover:text-rose-700 flex items-center gap-1 font-medium bg-rose-50 px-2 py-1 rounded-md hover:bg-rose-100 transition-colors"
+                    title="View in YouGlish"
+                  >
+                    <span className="hidden md:inline">YouGlish</span> <ExternalLink className="w-3 h-3" />
+                  </a>
+                  <a
                     href={`https://dictionary.cambridge.org/dictionary/english/${item.expression.replace(/\s+/g, '-').toLowerCase()}`}
                     target="_blank"
                     rel="noopener noreferrer"
@@ -174,6 +185,49 @@ const ExpressionManager: React.FC<ExpressionManagerProps> = ({ items, onUpdate, 
                     ))}
                   </ul>
                 </div>
+                {item.synonyms && item.synonyms.length > 0 && (
+                  <div className="pt-2 border-t border-slate-200">
+                    <span className="text-xs font-bold text-slate-400 uppercase leading-none">Synonyms Ladder (Intensity & Formality)</span>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {item.synonyms.map((syn, i) => (
+                        <div key={i} className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2 py-1.5 shadow-sm">
+                          <span className="text-sm font-semibold text-slate-800">{syn.word}</span>
+                          <div className="flex flex-col text-[9px] text-slate-400 font-mono tracking-tighter">
+                            <span>INT:{syn.intensity}/10</span>
+                            <span>FRM:{syn.formality}/10</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {item.collocations && (item.collocations.verbs?.length > 0 || item.collocations.adjectives?.length > 0) && (
+                  <div className="pt-2 border-t border-slate-200">
+                    <span className="text-xs font-bold text-slate-400 uppercase">Essential Collocations</span>
+                    <div className="flex flex-col sm:flex-row gap-4 mt-2">
+                      {item.collocations.verbs && item.collocations.verbs.length > 0 && (
+                        <div className="flex-1">
+                          <span className="text-[10px] font-semibold text-indigo-400 uppercase mb-1 block">Verbs</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {item.collocations.verbs.map((v, i) => (
+                              <span key={i} className="text-xs font-medium bg-indigo-50 border border-indigo-100 text-indigo-700 px-2 py-0.5 rounded-md">{v}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {item.collocations.adjectives && item.collocations.adjectives.length > 0 && (
+                        <div className="flex-1">
+                          <span className="text-[10px] font-semibold text-emerald-500 uppercase mb-1 block">Adjectives</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {item.collocations.adjectives.map((a, i) => (
+                              <span key={i} className="text-xs font-medium bg-emerald-50 border border-emerald-100 text-emerald-700 px-2 py-0.5 rounded-md">{a}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           ))

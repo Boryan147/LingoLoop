@@ -6,6 +6,7 @@ import VisualContext from './components/VisualContext';
 import ReviewSession from './components/ReviewSession';
 import Auth from './components/Auth';
 import ScenarioGenerator from './components/ScenarioGenerator';
+import SpeakingPractice from './components/SpeakingPractice';
 import { Page, VocabularyItem, StudyStats } from './types';
 import * as storage from './services/storage';
 import { supabase } from './services/supabase';
@@ -108,6 +109,8 @@ const App: React.FC = () => {
         return <ReviewSession onComplete={() => handleNavigate(Page.DASHBOARD)} userId={session.user.id} />;
       case Page.SCENARIO:
         return <ScenarioGenerator userId={session.user.id} />;
+      case Page.SPEAKING:
+        return <SpeakingPractice />;
       default:
         return <Dashboard stats={stats} onReviewStart={() => handleNavigate(Page.REVIEW)} />;
     }

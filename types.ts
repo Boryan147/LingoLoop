@@ -4,6 +4,25 @@ export enum Page {
   VISUAL_CONTEXT = 'VISUAL_CONTEXT',
   REVIEW = 'REVIEW',
   SCENARIO = 'SCENARIO',
+  SPEAKING = 'SPEAKING',
+}
+
+export interface Synonym {
+  word: string;
+  intensity: number;
+  formality: number;
+}
+
+export interface Collocations {
+  verbs: string[];
+  adjectives: string[];
+}
+
+export interface FeedbackResult {
+  transcription: string;
+  grammarCorrections: { original: string; corrected: string; explanation: string }[];
+  vocabularyUpgrades: { word: string; suggestion: string; reason: string }[];
+  nativeSuggestions: string[];
 }
 
 export interface VocabularyItem {
@@ -14,6 +33,8 @@ export interface VocabularyItem {
   phonetic: string;
   verbForms?: string;
   examples: string[];
+  synonyms?: Synonym[];
+  collocations?: Collocations;
   scenario: string;
   user_id?: string;
   createdAt: number;

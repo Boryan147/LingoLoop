@@ -15,9 +15,11 @@ export const generateExpressionContext = async (expression: string) => {
         "phonetic": "International Phonetic Alphabet (IPA) representation",
         "verbForms": "For verbs, include forms like 'do, did, done'. For non-verbs, leave as empty string or omit.",
         "examples": ["Sentence 1", "Sentence 2", "Sentence 3", "Sentence 4"],
+        "synonyms": [{"word": "synonym 1", "intensity": 1-10, "formality": 1-10}],
+        "collocations": {"verbs": ["verb1", "verb2"], "adjectives": ["adj1", "adj2"]},
         "scenario": "A short, engaging paragraph (approx 3-4 sentences) describing a realistic daily life situation where this expression is used naturally."
       }
-      IMPORTANT: Provide at least 3-4 distinct example sentences demonstrating different usages if possible.`,
+      IMPORTANT: Provide at least 3-4 distinct example sentences demonstrating different usages if possible. Ensure synonyms are graded (intensity and formality from 1-10).`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -28,9 +30,22 @@ export const generateExpressionContext = async (expression: string) => {
             phonetic: { type: Type.STRING },
             verbForms: { type: Type.STRING },
             examples: { type: Type.ARRAY, items: { type: Type.STRING } },
+            synonyms: { 
+              type: Type.ARRAY, 
+              items: { 
+                type: Type.OBJECT, 
+                properties: { word: { type: Type.STRING }, intensity: { type: Type.INTEGER }, formality: { type: Type.INTEGER } },
+                required: ["word", "intensity", "formality"] 
+              } 
+            },
+            collocations: { 
+              type: Type.OBJECT, 
+              properties: { verbs: { type: Type.ARRAY, items: { type: Type.STRING } }, adjectives: { type: Type.ARRAY, items: { type: Type.STRING } } },
+              required: ["verbs", "adjectives"] 
+            },
             scenario: { type: Type.STRING },
           },
-          required: ["definition", "partOfSpeech", "phonetic", "examples", "scenario"],
+          required: ["definition", "partOfSpeech", "phonetic", "examples", "synonyms", "collocations", "scenario"],
         }
       }
     });
@@ -169,5 +184,64 @@ export const generateScenarioExpressions = async (scenario: string) => {
   } catch (error) {
     console.error("Gemini Scenario Error:", error);
     throw new Error("Failed to generate scenario expressions.");
+  }
+};
+
+export const analyzeAudioFeedback = async (base64Audio: string, mimeType: string) => {
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-1.5-flash',
+      contents: {
+        parts: [
+          {
+            inlineData: {
+              data: base64Audio,
+              mimeType: mimeType
+            }
+          },
+          {
+            text: `Transcribe this audio, then analyze it for English learners.
+            Return a JSON object with:
+            1. "transcription": The exact transcription of the audio.
+            2. "grammarCorrections": Array of objects { "original": text, "corrected": text, "explanation": text } capturing any grammatical errors.
+            3. "vocabularyUpgrades": Array of objects { "word": bad/basic word used, "suggestion": better word, "reason": why } identifying "low-level" word choices.
+            4. "nativeSuggestions": Array of strings providing overall suggestions from a native speaker perspective to sound more natural.
+            `
+          }
+        ]
+      },
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            transcription: { type: Type.STRING },
+            grammarCorrections: { 
+              type: Type.ARRAY, 
+              items: { 
+                type: Type.OBJECT, 
+                properties: { original: { type: Type.STRING }, corrected: { type: Type.STRING }, explanation: { type: Type.STRING } },
+                required: ["original", "corrected", "explanation"]
+              } 
+            },
+            vocabularyUpgrades: { 
+              type: Type.ARRAY, 
+              items: { 
+                type: Type.OBJECT, 
+                properties: { word: { type: Type.STRING }, suggestion: { type: Type.STRING }, reason: { type: Type.STRING } },
+                required: ["word", "suggestion", "reason"]
+              } 
+            },
+            nativeSuggestions: { type: Type.ARRAY, items: { type: Type.STRING } },
+          },
+          required: ["transcription", "grammarCorrections", "vocabularyUpgrades", "nativeSuggestions"],
+        }
+      }
+    });
+
+    return JSON.parse(response.text || '{}');
+  } catch (error) {
+    console.error("Gemini Audio Feedback Error:", error);
+    throw new Error("Failed to analyze audio.");
   }
 };

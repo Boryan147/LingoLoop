@@ -9,6 +9,8 @@ CREATE TABLE vocabulary (
   verb_forms TEXT,
   examples TEXT[] NOT NULL DEFAULT '{}',
   scenario TEXT NOT NULL,
+  synonyms JSONB,
+  collocations JSONB,
   created_at BIGINT NOT NULL,
   
   -- SRS Properties
@@ -76,6 +78,8 @@ CREATE TABLE scenario_vocabulary (
   phonetic TEXT,
   verb_forms TEXT,
   examples TEXT[] NOT NULL DEFAULT '{}',
+  synonyms JSONB,
+  collocations JSONB,
   created_at BIGINT NOT NULL,
   
   -- SRS Properties

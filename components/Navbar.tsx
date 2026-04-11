@@ -1,6 +1,6 @@
 import React from 'react';
 import { Page } from '../types';
-import { LayoutDashboard, BookOpen, Camera, BrainCircuit, Map } from 'lucide-react';
+import { LayoutDashboard, BookOpen, Camera, BrainCircuit, Map, Mic } from 'lucide-react';
 
 interface NavbarProps {
   currentPage: Page;
@@ -13,6 +13,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentPage, onNavigate }) => {
     { page: Page.EXPRESSIONS, label: 'Expressions', icon: BookOpen },
     { page: Page.VISUAL_CONTEXT, label: 'Think Visual', icon: Camera },
     { page: Page.SCENARIO, label: 'Scenarios', icon: Map },
+    { page: Page.SPEAKING, label: 'Speaking', icon: Mic },
     { page: Page.REVIEW, label: 'Review', icon: BrainCircuit },
   ];
 
