@@ -166,6 +166,43 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
                       )}
                     </ul>
                   </div>
+
+                  {item.synonyms && item.synonyms.length > 0 && (
+                    <div>
+                      <span className="text-indigo-300 text-[10px] md:text-xs font-bold uppercase block mb-1">Synonyms</span>
+                      <div className="flex flex-wrap gap-2">
+                        {item.synonyms.map((syn, i) => (
+                          <span key={i} className="text-xs bg-indigo-800/50 text-indigo-100 border border-indigo-500/30 px-2 py-1 rounded-md shadow-sm flex items-center">
+                            {syn.word} <span className="opacity-50 text-[9px] ml-1.5 font-mono">INT:{syn.intensity}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {item.collocations && (item.collocations.verbs?.length > 0 || item.collocations.adjectives?.length > 0) && (
+                    <div>
+                      <span className="text-indigo-300 text-[10px] md:text-xs font-bold uppercase block mb-1">Collocations</span>
+                      <div className="flex flex-col gap-2 bg-indigo-800/30 p-2.5 rounded-lg border border-indigo-500/20">
+                        {item.collocations.verbs && item.collocations.verbs.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 items-center">
+                            <span className="text-[9px] text-indigo-300 uppercase font-bold mr-1">Verbs:</span>
+                            {item.collocations.verbs.map((v, i) => (
+                              <span key={i} className="text-xs text-indigo-100 font-medium">{v}{i < item.collocations!.verbs.length - 1 ? ', ' : ''}</span>
+                            ))}
+                          </div>
+                        )}
+                        {item.collocations.adjectives && item.collocations.adjectives.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 items-center">
+                            <span className="text-[9px] text-teal-300 uppercase font-bold mr-1">Adjectives:</span>
+                            {item.collocations.adjectives.map((a, i) => (
+                              <span key={i} className="text-xs text-teal-100 font-medium">{a}{i < item.collocations!.adjectives.length - 1 ? ', ' : ''}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
