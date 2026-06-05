@@ -136,7 +136,7 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
     });
 
   return (
-    <div className="p-4 md:p-8 max-w-4xl mx-auto h-full flex flex-col">
+    <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-2">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Capture Vocabulary</h2>
@@ -303,7 +303,7 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
       </div>
 
       {/* Vocabulary list */}
-      <div className="flex-1 overflow-y-auto pr-0 md:pr-1 space-y-4 pb-20">
+      <div className="space-y-4 pb-24">
         {filteredItems.length === 0 ? (
           <div className="text-center py-16 bg-white border border-slate-200 rounded-2xl">
             <Book className="w-12 h-12 text-slate-300 mx-auto mb-3" />

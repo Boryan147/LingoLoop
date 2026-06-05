@@ -115,7 +115,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, onReviewStart, items, user
       </header>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6 mb-10">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-10">
         <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
           <div className="flex justify-between items-start mb-4">
             <div className="p-3 bg-indigo-50 rounded-xl">
@@ -167,14 +167,6 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, onReviewStart, items, user
             <h3 className="text-3xl font-bold text-slate-800">{stats.retentionRate}%</h3>
             <p className="text-sm text-slate-500 font-medium">Estimated Retention</p>
           </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-slate-800 to-slate-900 p-6 rounded-2xl border border-slate-700 shadow-lg text-white flex flex-col justify-center items-center text-center">
-          <h3 className="text-lg font-semibold mb-2">Daily Goal</h3>
-          <div className="w-full bg-slate-700 h-2 rounded-full mb-2 overflow-hidden">
-            <div className="bg-indigo-400 h-full w-3/4 rounded-full" />
-          </div>
-          <p className="text-sm text-slate-400">15/20 mins studied</p>
         </div>
       </div>
 
