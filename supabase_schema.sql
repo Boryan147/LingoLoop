@@ -3,6 +3,10 @@ DROP TABLE IF EXISTS scenario_vocabulary CASCADE;
 DROP TABLE IF EXISTS scenarios CASCADE;
 DROP TABLE IF EXISTS vocabulary CASCADE;
 
+-- Drop old types if they exist
+DROP TYPE IF EXISTS vocabulary_type CASCADE;
+DROP TYPE IF EXISTS vocabulary_status CASCADE;
+
 -- Create custom types for Type and Status
 CREATE TYPE vocabulary_type AS ENUM ('ACTIVE', 'PASSIVE');
 CREATE TYPE vocabulary_status AS ENUM ('NEW', 'LEARNING', 'REVIEW', 'MASTERED');

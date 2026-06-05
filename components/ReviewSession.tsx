@@ -246,11 +246,15 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
                       <div className="w-14 h-14 bg-emerald-50 rounded-full flex items-center justify-center mb-6">
                         <Zap className="w-7 h-7 text-emerald-500 fill-current" />
                       </div>
-                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Recall target English expression for:</span>
+                      <span className="text-xs md:text-sm font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full uppercase tracking-wide mb-3">
+                        {activeQueue[activeIndex].context_hint 
+                          ? "Trigger Thought (Recall the English Phrase)" 
+                          : "English Expression (Recall the Meaning)"}
+                      </span>
                       <h2 className="text-xl md:text-2xl font-bold text-slate-800 leading-normal max-w-md">
-                        {activeQueue[activeIndex].context_hint || "General review"}
+                        {activeQueue[activeIndex].context_hint || activeQueue[activeIndex].word_or_phrase}
                       </h2>
-                      <button className="mt-8 text-xs font-bold text-indigo-600">Reveal English Answer</button>
+                      <button className="mt-8 text-xs font-bold text-indigo-650">Reveal Answer</button>
                     </div>
                   </div>
 
