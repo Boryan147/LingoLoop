@@ -207,7 +207,7 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
   }
 
   return (
-    <div className="h-full w-full bg-slate-50 overflow-y-auto">
+    <div className="w-full bg-slate-50">
       <div className="min-h-full flex flex-col items-center p-4 md:p-6 pb-24 md:pb-6">
         <div className="w-full max-w-2xl flex flex-col flex-1">
           

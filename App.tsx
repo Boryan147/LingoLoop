@@ -128,7 +128,7 @@ const App: React.FC = () => {
       <Navbar currentPage={currentPage} onNavigate={handleNavigate} />
 
       {/* Main Content Area */}
-      <main className="flex-1 h-full overflow-hidden relative pb-16 md:pb-0">
+      <main className="flex-1 h-full overflow-y-auto relative pb-16 md:pb-0">
         {currentPage === Page.DASHBOARD && (
           <div className="absolute top-4 right-4 z-50">
             <button

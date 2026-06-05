@@ -82,7 +82,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, onReviewStart, items, user
   const passivePercent = stats.totalItems > 0 ? Math.round((stats.passiveItems / stats.totalItems) * 100) : 0;
 
   return (
-    <div className="p-4 md:p-8 max-w-6xl mx-auto w-full h-full overflow-y-auto">
+    <div className="p-4 md:p-8 max-w-6xl mx-auto w-full">
       <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
           <h1 className="text-3xl font-bold text-slate-900 tracking-tight">LingoLoop</h1>

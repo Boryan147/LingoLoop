@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { VocabularyItem } from '../types';
 import { generateIntakeAI, evaluateSentence } from '../services/gemini';
 import { getInitialSRSState } from '../services/srs';
-import { Plus, Loader2, Book, Sparkles, AlertCircle, Trash2, ArrowLeftRight, Search, Zap, Eye, Calendar, CheckCircle2 } from 'lucide-react';
+import { Plus, Loader2, Book, Sparkles, AlertCircle, Trash2, ArrowLeftRight, Search, Zap, Eye, Calendar, CheckCircle2, ArrowUp } from 'lucide-react';
 import * as storage from '../services/storage';
 
 interface CaptureProps {
@@ -28,6 +28,31 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
   // Sentence evaluation states for active items in list
   const [customSentences, setCustomSentences] = useState<Record<string, string>>({});
   const [sentenceFeedback, setSentenceFeedback] = useState<Record<string, { evaluating: boolean, result?: { isCorrect: boolean, feedback: string }, error?: string }>>({});
+
+  const [showScrollTop, setShowScrollTop] = useState(false);
+
+  useEffect(() => {
+    const mainEl = document.querySelector('main');
+    if (!mainEl) return;
+
+    const handleScroll = () => {
+      if (mainEl.scrollTop > 300) {
+        setShowScrollTop(true);
+      } else {
+        setShowScrollTop(false);
+      }
+    };
+
+    mainEl.addEventListener('scroll', handleScroll);
+    return () => mainEl.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const scrollToTop = () => {
+    const mainEl = document.querySelector('main');
+    if (mainEl) {
+      mainEl.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   const handleEvaluateSentence = async (itemId: string, expression: string) => {
     const sentence = customSentences[itemId];
@@ -429,6 +454,16 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
           ))
         )}
       </div>
+
+      {showScrollTop && (
+        <button
+          onClick={scrollToTop}
+          className="fixed bottom-20 md:bottom-6 right-6 p-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-lg transition-all transform hover:scale-110 z-50 flex items-center justify-center animate-in fade-in duration-200"
+          title="Back to Top"
+        >
+          <ArrowUp className="w-5 h-5" />
+        </button>
+      )}
     </div>
   );
 };
