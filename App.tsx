@@ -1,12 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
 import Dashboard from './components/Dashboard';
-import ExpressionManager from './components/ExpressionManager';
-import VisualContext from './components/VisualContext';
+import Capture from './components/Capture';
 import ReviewSession from './components/ReviewSession';
 import Auth from './components/Auth';
-import ScenarioGenerator from './components/ScenarioGenerator';
-import SpeakingPractice from './components/SpeakingPractice';
 import { Page, VocabularyItem, StudyStats } from './types';
 import * as storage from './services/storage';
 import { supabase } from './services/supabase';
@@ -15,7 +12,14 @@ import { LogOut } from 'lucide-react';
 const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.DASHBOARD);
   const [items, setItems] = useState<VocabularyItem[]>([]);
-  const [stats, setStats] = useState<StudyStats>({ totalItems: 0, itemsDue: 0, retentionRate: 100, streak: 0 });
+  const [stats, setStats] = useState<StudyStats>({
+    totalItems: 0,
+    activeItems: 0,
+    passiveItems: 0,
+    itemsDue: 0,
+    retentionRate: 100,
+    streak: 0,
+  });
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -39,7 +43,7 @@ const App: React.FC = () => {
         handlePostLogin(session.user.id);
       } else {
         setItems([]);
-        setStats({ totalItems: 0, itemsDue: 0, retentionRate: 100, streak: 0 });
+        setStats({ totalItems: 0, activeItems: 0, passiveItems: 0, itemsDue: 0, retentionRate: 100, streak: 0 });
         setLoading(false);
       }
     });
@@ -95,24 +99,26 @@ const App: React.FC = () => {
             onUpdate={() => refreshData()}
           />
         );
-      case Page.EXPRESSIONS:
+      case Page.CAPTURE:
         return (
-          <ExpressionManager
+          <Capture
             items={items}
             onUpdate={() => refreshData()}
             userId={session.user.id}
           />
         );
-      case Page.VISUAL_CONTEXT:
-        return <VisualContext onVocabularyAdded={() => refreshData()} userId={session.user.id} />;
       case Page.REVIEW:
         return <ReviewSession onComplete={() => handleNavigate(Page.DASHBOARD)} userId={session.user.id} />;
-      case Page.SCENARIO:
-        return <ScenarioGenerator userId={session.user.id} />;
-      case Page.SPEAKING:
-        return <SpeakingPractice />;
       default:
-        return <Dashboard stats={stats} onReviewStart={() => handleNavigate(Page.REVIEW)} />;
+        return (
+          <Dashboard
+            stats={stats}
+            onReviewStart={() => handleNavigate(Page.REVIEW)}
+            items={items}
+            userId={session?.user?.id}
+            onUpdate={() => refreshData()}
+          />
+        );
     }
   };
 

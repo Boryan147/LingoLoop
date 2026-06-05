@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { VocabularyItem } from '../types';
 import { calculateNextReview } from '../services/srs';
 import * as storage from '../services/storage';
-import { PartyPopper, Lightbulb } from 'lucide-react';
+import { PartyPopper, Lightbulb, Zap, Eye, HelpCircle } from 'lucide-react';
 
 interface ReviewSessionProps {
   onComplete: () => void;
@@ -28,7 +28,7 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
     try {
       const currentItem = queue[currentIndex];
       const updates = calculateNextReview(currentItem, rating);
-      const updatedItem = { ...currentItem, ...updates };
+      const updatedItem = { ...currentItem, ...updates, updatedAt: Date.now() } as VocabularyItem;
 
       await storage.updateItem(updatedItem, userId);
 
@@ -51,25 +51,13 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
     }
   };
 
-  const highlightMatch = (text: string, term: string) => {
-    if (!term.trim() || !text) return text;
-    const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`(${escapedTerm})`, 'gi');
-
-    return text.split(regex).map((part, i) =>
-      part.toLowerCase() === term.toLowerCase() ?
-        <span key={i} className="font-extrabold text-yellow-300 bg-white/10 px-1 rounded mx-0.5">{part}</span> :
-        part
-    );
-  };
-
   if ((queue.length === 0 && !completed) || completed) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-8 animate-in zoom-in-95 duration-300">
-        <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-6">
+        <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-6">
           <PartyPopper className="w-10 h-10" />
         </div>
-        <h2 className="text-3xl font-bold text-slate-900 mb-2">
+        <h2 className="text-3xl font-bold text-slate-900 mb-2 font-sans tracking-tight">
           {completed ? "Session Complete!" : "All Caught Up!"}
         </h2>
         <p className="text-slate-500 mb-8">
@@ -92,119 +80,100 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
       <div className="min-h-full flex flex-col items-center p-4 md:p-6 pb-24 md:pb-6">
         <div className="w-full max-w-2xl flex flex-col flex-1">
           {/* Header */}
-          <div className="flex justify-between text-sm font-bold text-slate-400 mb-4 uppercase tracking-wider shrink-0">
-            <span>Review Session</span>
+          <div className="flex justify-between items-center text-sm font-bold text-slate-400 mb-4 uppercase tracking-wider shrink-0">
+            <span className="flex items-center gap-1.5">
+              Review Session
+              <span className={`text-[10px] px-2 py-0.5 rounded-full flex items-center gap-0.5 ${item.type === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
+                {item.type === 'ACTIVE' ? <Zap className="w-2.5 h-2.5 fill-current" /> : <Eye className="w-2.5 h-2.5" />}
+                {item.type}
+              </span>
+            </span>
             <span>{currentIndex + 1} / {queue.length}</span>
           </div>
 
           {/* Flashcard Area */}
-          {/* Using flex-1 to fill available space, with min-height safety */}
           <div className="flex-1 relative perspective-1000 min-h-[60vh] md:min-h-[400px] mb-6 group">
-            {/* Using Grid for stacking faces instead of absolute positioning to prevent height collapse */}
             <div className={`relative w-full h-full transition-all duration-500 transform-style-3d grid grid-cols-1 grid-rows-1 ${isFlipped ? 'rotate-y-180' : ''}`}>
 
               {/* Front Face */}
               <div
-                className={`col-start-1 row-start-1 w-full h-full bg-white rounded-3xl shadow-xl border border-slate-100 flex flex-col p-4 md:p-10 backface-hidden cursor-pointer hover:shadow-2xl transition-all overflow-y-auto custom-scrollbar ${isFlipped ? 'pointer-events-none' : 'z-20'}`}
+                className={`col-start-1 row-start-1 w-full h-full bg-white rounded-3xl shadow-xl border border-slate-200/80 flex flex-col p-6 md:p-10 backface-hidden cursor-pointer hover:shadow-2xl transition-all overflow-y-auto custom-scrollbar ${isFlipped ? 'pointer-events-none' : 'z-20'}`}
                 onClick={handleFlip}
               >
-                <div className="flex-1 flex flex-col items-center justify-center min-h-min">
-                  <div className="w-12 h-12 md:w-16 md:h-16 bg-indigo-50 rounded-full flex items-center justify-center mb-4 md:mb-6 shrink-0">
+                <div className="flex-1 flex flex-col items-center justify-center text-center">
+                  <div className="w-12 h-12 md:w-16 md:h-16 bg-slate-50 rounded-full flex items-center justify-center mb-6 border border-slate-100">
                     <Lightbulb className="w-6 h-6 md:w-8 md:h-8 text-indigo-500" />
                   </div>
-                  <span className="text-xs md:text-sm font-bold text-slate-400 mb-2 uppercase tracking-wide shrink-0">Expression</span>
-
-                  <h2 className="text-xl md:text-4xl font-bold text-slate-900 text-center mb-8 leading-snug break-words max-w-full">
-                    {item.expression}
-                  </h2>
+                  
+                  {item.type === 'ACTIVE' ? (
+                    <>
+                      <span className="text-xs md:text-sm font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full uppercase tracking-wide mb-3">
+                        Trigger Thought (Recall the English Phrase)
+                      </span>
+                      <h2 className="text-xl md:text-3xl font-bold text-slate-800 leading-normal max-w-md">
+                        {item.context_hint || "No context hint set. Recall target meaning."}
+                      </h2>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-xs md:text-sm font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full uppercase tracking-wide mb-3">
+                        English Expression (Recall the Meaning)
+                      </span>
+                      <h2 className="text-2xl md:text-4xl font-extrabold text-slate-900 tracking-tight leading-snug">
+                        {item.word_or_phrase}
+                      </h2>
+                    </>
+                  )}
 
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       handleFlip();
                     }}
-                    className="mt-auto md:mt-4 px-6 py-2 md:px-8 md:py-3 bg-indigo-50 text-indigo-600 rounded-full text-xs md:text-sm font-bold hover:bg-indigo-100 transition-colors shadow-sm shrink-0"
+                    className="mt-12 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-full text-xs font-bold hover:bg-indigo-100 transition-colors shadow-sm"
                   >
-                    Click to Reveal Meaning
+                    Click to Reveal Answer
                   </button>
                 </div>
               </div>
 
               {/* Back Face */}
-              {/* Note: rotate-y-180 is needed here to orient the back face correctly in the 3D space */}
-              <div className={`col-start-1 row-start-1 w-full h-full bg-indigo-600 rounded-3xl shadow-xl flex flex-col p-5 md:p-8 rotate-y-180 backface-hidden text-white overflow-y-auto custom-scrollbar ${isFlipped ? 'z-20' : 'pointer-events-none'}`}>
-                <h3 className="text-lg md:text-xl font-bold mb-4 md:mb-6 border-b border-indigo-500 pb-4 text-center opacity-80 shrink-0 break-words">{item.expression}</h3>
-
-                <div className="space-y-4 md:space-y-6 flex-1">
-                  <div className="bg-indigo-700/50 p-4 rounded-xl border border-indigo-500/30 shadow-inner">
-                    <span className="text-indigo-200 text-[10px] md:text-xs font-bold uppercase block mb-1 tracking-wider">
-                      Meaning
+              <div className={`col-start-1 row-start-1 w-full h-full rounded-3xl shadow-xl flex flex-col p-6 md:p-10 rotate-y-180 backface-hidden text-white overflow-y-auto custom-scrollbar ${item.type === 'ACTIVE' ? 'bg-emerald-600 border border-emerald-500' : 'bg-blue-600 border border-blue-500'} ${isFlipped ? 'z-20' : 'pointer-events-none'}`}>
+                <div className="flex-1 flex flex-col justify-center space-y-6">
+                  
+                  {/* Target Phrase */}
+                  <div className="text-center pb-4 border-b border-white/20">
+                    <span className="text-[10px] font-bold uppercase tracking-wider block opacity-70 mb-1">
+                      Target Expression
                     </span>
-                    <p className="text-base md:text-xl font-medium leading-relaxed text-white">
+                    <h2 className="text-2xl md:text-4xl font-black tracking-tight">
+                      {item.word_or_phrase}
+                    </h2>
+                  </div>
+
+                  {/* Definition */}
+                  <div className="bg-white/10 p-4 rounded-xl border border-white/10 shadow-inner">
+                    <span className="text-[10px] font-bold uppercase tracking-wider block opacity-80 mb-1 text-yellow-300">
+                      Definition
+                    </span>
+                    <p className="text-sm md:text-base font-semibold leading-relaxed">
                       {item.definition}
                     </p>
                   </div>
 
-                  <div>
-                    <span className="text-indigo-300 text-[10px] md:text-xs font-bold uppercase block mb-1">Context Scenario</span>
-                    <p className="text-sm text-indigo-50 leading-relaxed bg-indigo-800/30 p-3 rounded-lg border border-indigo-500/20">
-                      {highlightMatch(item.scenario, item.expression)}
+                  {/* Context Hint */}
+                  <div className="bg-white/5 p-4 rounded-xl border border-white/5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider block opacity-80 mb-1">
+                      {item.type === 'ACTIVE' ? 'Chinese Trigger Scenario' : 'Original Context Sentence'}
+                    </span>
+                    <p className="text-xs md:text-sm leading-relaxed opacity-95">
+                      {item.context_hint}
                     </p>
                   </div>
 
-                  <div>
-                    <span className="text-indigo-300 text-[10px] md:text-xs font-bold uppercase block mb-1">Examples</span>
-                    <ul className="list-none space-y-2">
-                      {item.examples && item.examples.length > 0 ? (
-                        item.examples.map((ex, i) => (
-                          <li key={i} className="text-xs md:text-sm text-indigo-100 pl-3 border-l-2 border-indigo-400/50 italic">
-                            "{highlightMatch(ex, item.expression)}"
-                          </li>
-                        ))
-                      ) : (
-                        <li className="text-sm italic opacity-50">No examples available.</li>
-                      )}
-                    </ul>
-                  </div>
-
-                  {item.synonyms && item.synonyms.length > 0 && (
-                    <div>
-                      <span className="text-indigo-300 text-[10px] md:text-xs font-bold uppercase block mb-1">Synonyms</span>
-                      <div className="flex flex-wrap gap-2">
-                        {item.synonyms.map((syn, i) => (
-                          <span key={i} className="text-xs bg-indigo-800/50 text-indigo-100 border border-indigo-500/30 px-2 py-1 rounded-md shadow-sm flex items-center">
-                            {syn.word} <span className="opacity-50 text-[9px] ml-1.5 font-mono">INT:{syn.intensity}</span>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {item.collocations && (item.collocations.verbs?.length > 0 || item.collocations.adjectives?.length > 0) && (
-                    <div>
-                      <span className="text-indigo-300 text-[10px] md:text-xs font-bold uppercase block mb-1">Collocations</span>
-                      <div className="flex flex-col gap-2 bg-indigo-800/30 p-2.5 rounded-lg border border-indigo-500/20">
-                        {item.collocations.verbs && item.collocations.verbs.length > 0 && (
-                          <div className="flex flex-wrap gap-1.5 items-center">
-                            <span className="text-[9px] text-indigo-300 uppercase font-bold mr-1">Verbs:</span>
-                            {item.collocations.verbs.map((v, i) => (
-                              <span key={i} className="text-xs text-indigo-100 font-medium">{v}{i < item.collocations!.verbs.length - 1 ? ', ' : ''}</span>
-                            ))}
-                          </div>
-                        )}
-                        {item.collocations.adjectives && item.collocations.adjectives.length > 0 && (
-                          <div className="flex flex-wrap gap-1.5 items-center">
-                            <span className="text-[9px] text-teal-300 uppercase font-bold mr-1">Adjectives:</span>
-                            {item.collocations.adjectives.map((a, i) => (
-                              <span key={i} className="text-xs text-teal-100 font-medium">{a}{i < item.collocations!.adjectives.length - 1 ? ', ' : ''}</span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
+
             </div>
           </div>
 
@@ -215,35 +184,36 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
               <div className="grid grid-cols-4 gap-2 md:gap-4">
                 <button
                   onClick={() => handleRating(1)}
-                  className="flex flex-col items-center justify-center gap-1 md:gap-2 p-2 md:p-3 rounded-xl bg-white border-b-2 md:border-b-4 border-slate-200 active:border-b-0 active:translate-y-0.5 hover:bg-red-50 transition-all touch-manipulation"
+                  className="flex flex-col items-center justify-center gap-1 p-2 rounded-xl bg-white border-b-2 border-slate-200 hover:bg-red-50 transition-all touch-manipulation shadow-sm"
                 >
-                  <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 font-bold text-sm md:text-lg">1</div>
-                  <span className="text-[10px] md:text-xs font-bold text-slate-600 uppercase tracking-tight">Forgot</span>
+                  <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center text-red-600 font-bold text-sm">1</div>
+                  <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tight">Forgot</span>
+                </button>
+                <button
+                  onClick={() => handleRating(2)}
+                  className="flex flex-col items-center justify-center gap-1 p-2 rounded-xl bg-white border-b-2 border-slate-200 hover:bg-orange-50 transition-all touch-manipulation shadow-sm"
+                >
+                  <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 font-bold text-sm">2</div>
+                  <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tight">Hard</span>
                 </button>
                 <button
                   onClick={() => handleRating(3)}
-                  className="flex flex-col items-center justify-center gap-1 md:gap-2 p-2 md:p-3 rounded-xl bg-white border-b-2 md:border-b-4 border-slate-200 active:border-b-0 active:translate-y-0.5 hover:bg-orange-50 transition-all touch-manipulation"
+                  className="flex flex-col items-center justify-center gap-1 p-2 rounded-xl bg-white border-b-2 border-slate-200 hover:bg-blue-50 transition-all touch-manipulation shadow-sm"
                 >
-                  <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 font-bold text-sm md:text-lg">2</div>
-                  <span className="text-[10px] md:text-xs font-bold text-slate-600 uppercase tracking-tight">Hard</span>
+                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm">3</div>
+                  <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tight">Good</span>
                 </button>
                 <button
                   onClick={() => handleRating(4)}
-                  className="flex flex-col items-center justify-center gap-1 md:gap-2 p-2 md:p-3 rounded-xl bg-white border-b-2 md:border-b-4 border-slate-200 active:border-b-0 active:translate-y-0.5 hover:bg-blue-50 transition-all touch-manipulation"
+                  className="flex flex-col items-center justify-center gap-1 p-2 rounded-xl bg-white border-b-2 border-slate-200 hover:bg-green-50 transition-all touch-manipulation shadow-sm"
                 >
-                  <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm md:text-lg">3</div>
-                  <span className="text-[10px] md:text-xs font-bold text-slate-600 uppercase tracking-tight">Good</span>
-                </button>
-                <button
-                  onClick={() => handleRating(5)}
-                  className="flex flex-col items-center justify-center gap-1 md:gap-2 p-2 md:p-3 rounded-xl bg-white border-b-2 md:border-b-4 border-slate-200 active:border-b-0 active:translate-y-0.5 hover:bg-green-50 transition-all touch-manipulation"
-                >
-                  <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600 font-bold text-sm md:text-lg">4</div>
-                  <span className="text-[10px] md:text-xs font-bold text-slate-600 uppercase tracking-tight">Easy</span>
+                  <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600 font-bold text-sm">4</div>
+                  <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tight">Easy</span>
                 </button>
               </div>
             </div>
           </div>
+
         </div>
       </div>
     </div>
