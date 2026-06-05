@@ -33,17 +33,17 @@ const mapToSupabase = (item: VocabularyItem) => ({
 const mapFromSupabase = (data: any): VocabularyItem => ({
   id: data.id,
   user_id: data.user_id,
-  word_or_phrase: data.word_or_phrase,
-  type: data.type,
-  context_hint: data.context_hint,
-  definition: data.definition,
-  status: data.status,
-  nextReviewDate: Number(data.next_review_date),
-  interval: data.interval,
-  repetitions: data.repetitions,
-  easeFactor: data.ease_factor,
-  createdAt: Number(data.created_at),
-  updatedAt: Number(data.updated_at),
+  word_or_phrase: data.word_or_phrase || data.expression || '',
+  type: data.type || 'ACTIVE',
+  context_hint: data.context_hint || data.scenario || '',
+  definition: data.definition || '',
+  status: data.status || 'NEW',
+  nextReviewDate: Number(data.next_review_date) || Date.now(),
+  interval: typeof data.interval === 'number' ? data.interval : 0,
+  repetitions: typeof data.repetitions === 'number' ? data.repetitions : (typeof data.repetition === 'number' ? data.repetition : 0),
+  easeFactor: typeof data.ease_factor === 'number' ? data.ease_factor : 2.5,
+  createdAt: Number(data.created_at) || Date.now(),
+  updatedAt: Number(data.updated_at) || Date.now(),
 });
 
 // --- Local Storage Fallback ---
