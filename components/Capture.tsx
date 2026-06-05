@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { VocabularyItem } from '../types';
-import { generateDefinition } from '../services/gemini';
+import { generateIntakeAI, evaluateSentence } from '../services/gemini';
 import { getInitialSRSState } from '../services/srs';
-import { Plus, Loader2, Book, Sparkles, AlertCircle, Trash2, ArrowLeftRight, Search, Zap, Eye, Calendar } from 'lucide-react';
+import { Plus, Loader2, Book, Sparkles, AlertCircle, Trash2, ArrowLeftRight, Search, Zap, Eye, Calendar, CheckCircle2 } from 'lucide-react';
 import * as storage from '../services/storage';
 
 interface CaptureProps {
@@ -16,6 +16,7 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
   const [vocabType, setVocabType] = useState<'ACTIVE' | 'PASSIVE'>('ACTIVE');
   const [contextHint, setContextHint] = useState('');
   const [definition, setDefinition] = useState('');
+  const [examples, setExamples] = useState<string[]>([]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'ALL' | 'ACTIVE' | 'PASSIVE'>('ALL');
@@ -24,16 +25,36 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Sentence evaluation states for active items in list
+  const [customSentences, setCustomSentences] = useState<Record<string, string>>({});
+  const [sentenceFeedback, setSentenceFeedback] = useState<Record<string, { evaluating: boolean, result?: { isCorrect: boolean, feedback: string }, error?: string }>>({});
+
+  const handleEvaluateSentence = async (itemId: string, expression: string) => {
+    const sentence = customSentences[itemId];
+    if (!sentence?.trim()) return;
+
+    setSentenceFeedback(prev => ({ ...prev, [itemId]: { evaluating: true } }));
+    try {
+      const result = await evaluateSentence(expression, sentence);
+      setSentenceFeedback(prev => ({ ...prev, [itemId]: { evaluating: false, result } }));
+    } catch (err) {
+      setSentenceFeedback(prev => ({ ...prev, [itemId]: { evaluating: false, error: "Failed to evaluate sentence. Try again." } }));
+    }
+  };
+
   const handleGenerate = async () => {
     if (!wordOrPhrase.trim()) return;
-    setIsGenerating(false);
     setIsGenerating(true);
     setError(null);
     try {
-      const def = await generateDefinition(wordOrPhrase, vocabType, contextHint);
-      setDefinition(def);
+      const result = await generateIntakeAI(wordOrPhrase, vocabType, contextHint);
+      if (vocabType === 'ACTIVE') {
+        setWordOrPhrase(result.word_or_phrase);
+      }
+      setDefinition(result.definition);
+      setExamples(result.examples);
     } catch (err: any) {
-      setError(err.message || 'Failed to generate definition.');
+      setError(err.message || 'Failed to generate content with AI.');
     } finally {
       setIsGenerating(false);
     }
@@ -54,6 +75,7 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
         type: vocabType,
         context_hint: contextHint.trim(),
         definition: definition.trim(),
+        examples: examples,
         createdAt: Date.now(),
         updatedAt: Date.now(),
         ...getInitialSRSState(),
@@ -63,6 +85,7 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
       setWordOrPhrase('');
       setContextHint('');
       setDefinition('');
+      setExamples([]);
       onUpdate();
     } catch (err: any) {
       setError(err.message || 'Failed to save vocabulary item.');
@@ -103,9 +126,9 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
   const filteredItems = items
     .filter(item => {
       const matchesSearch = 
-        item.word_or_phrase.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.definition.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.context_hint.toLowerCase().includes(searchQuery.toLowerCase());
+        (item.word_or_phrase || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (item.definition || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (item.context_hint || '').toLowerCase().includes(searchQuery.toLowerCase());
       
       const matchesType = filterType === 'ALL' || item.type === filterType;
       
@@ -133,12 +156,14 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
           {/* Word or Phrase & Type selection */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-2">
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Expression / Word</label>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">
+                {vocabType === 'ACTIVE' ? 'Your Thoughts (Chinese or Simple English)' : 'English Expression / Word'}
+              </label>
               <input
                 type="text"
                 value={wordOrPhrase}
                 onChange={(e) => setWordOrPhrase(e.target.value)}
-                placeholder="e.g. bite the bullet"
+                placeholder={vocabType === 'ACTIVE' ? "e.g. 表达不想内卷了，顺其自然" : "e.g. obfuscate"}
                 className="w-full text-base p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
                 disabled={isSaving}
                 required
@@ -149,7 +174,10 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
               <div className="flex bg-slate-100 p-1 rounded-xl">
                 <button
                   type="button"
-                  onClick={() => setVocabType('ACTIVE')}
+                  onClick={() => {
+                    setVocabType('ACTIVE');
+                    setExamples([]);
+                  }}
                   className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${vocabType === 'ACTIVE' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                 >
                   <Zap className="w-3.5 h-3.5" />
@@ -157,7 +185,10 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setVocabType('PASSIVE')}
+                  onClick={() => {
+                    setVocabType('PASSIVE');
+                    setExamples([]);
+                  }}
                   className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${vocabType === 'PASSIVE' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                 >
                   <Eye className="w-3.5 h-3.5" />
@@ -170,13 +201,13 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
           {/* Context Hint */}
           <div>
             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">
-              {vocabType === 'ACTIVE' ? 'Chinese Thought / Trigger Scenario' : 'Original Context Sentence / Source'}
+              {vocabType === 'ACTIVE' ? 'Chinese Context Hint (Optional)' : 'Original Sentence / Source (Optional)'}
             </label>
             <textarea
               value={contextHint}
               onChange={(e) => setContextHint(e.target.value)}
-              placeholder={vocabType === 'ACTIVE' ? "What thought triggers this phrase? e.g. 没时间了，硬着头皮做吧" : "Where did you see this phrase? e.g. He decided to bite the bullet and sign the deal."}
-              rows={2}
+              placeholder={vocabType === 'ACTIVE' ? "Context thought, e.g. 没时间了，硬着头皮做吧" : "Sentence where you found it, e.g. The writer had to obfuscate his true intentions."}
+              rows={1.5}
               className="w-full text-sm p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all resize-none"
               disabled={isSaving}
             />
@@ -185,7 +216,7 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
           {/* Definition */}
           <div>
             <div className="flex justify-between items-center mb-1">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Definition</label>
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Definition / Nuance</label>
               <button
                 type="button"
                 onClick={handleGenerate}
@@ -199,13 +230,25 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
             <textarea
               value={definition}
               onChange={(e) => setDefinition(e.target.value)}
-              placeholder="Enter definition manually or click AI Generate Assist"
+              placeholder="Enter explanation manually or click AI Generate Assist"
               rows={2}
               className="w-full text-sm p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all resize-none"
               disabled={isSaving}
               required
             />
           </div>
+
+          {/* Examples Preview */}
+          {examples.length > 0 && (
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/60">
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">AI Generated Examples</label>
+              <ul className="list-disc pl-4 space-y-1 text-sm text-slate-600">
+                {examples.map((ex, idx) => (
+                  <li key={idx}>{ex}</li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {error && (
             <p className="text-red-500 text-xs flex items-center gap-1 mt-2">
@@ -226,7 +269,6 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
 
       {/* List Filters & Search */}
       <div className="flex flex-col md:flex-row gap-3 items-center justify-between mb-4 shrink-0">
-        {/* Search */}
         <div className="relative w-full md:max-w-xs">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
@@ -238,7 +280,6 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
           />
         </div>
 
-        {/* Tab Filters */}
         <div className="flex bg-slate-100 p-1 rounded-xl w-full md:w-auto">
           <button
             onClick={() => setFilterType('ALL')}
@@ -281,7 +322,6 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
                       {item.word_or_phrase}
                     </h3>
                     
-                    {/* Type indicator and toggle */}
                     <button
                       onClick={() => handleToggleType(item)}
                       title="Click to toggle Active/Passive"
@@ -299,7 +339,6 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
                       <ArrowLeftRight className="w-2 h-2 ml-0.5 opacity-60" />
                     </button>
 
-                    {/* Status badge */}
                     <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${getStatusClass(item.status)}`}>
                       {item.status}
                     </span>
@@ -326,16 +365,61 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
               {item.context_hint && (
                 <div className="bg-slate-50 p-3 rounded-xl mb-3 border border-slate-100">
                   <span className="text-[10px] font-bold text-slate-400 uppercase block tracking-wider mb-0.5">
-                    {item.type === 'ACTIVE' ? 'Trigger Scenario (Chinese)' : 'Context Sentence (Source)'}
+                    {item.type === 'ACTIVE' ? 'Chinese Thought / Scenario' : 'Original Sentence'}
                   </span>
-                  <p className="text-xs text-slate-600 leading-relaxed font-sans">
+                  <p className="text-xs text-slate-600 leading-relaxed">
                     {item.context_hint}
                   </p>
                 </div>
               )}
 
+              {/* Examples */}
+              {item.examples && item.examples.length > 0 && (
+                <div className="mb-4">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block tracking-wider mb-1">Examples</span>
+                  <ul className="list-disc pl-4 space-y-0.5 text-xs text-slate-600">
+                    {item.examples.map((ex, idx) => (
+                      <li key={idx}>{ex}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Practice block specifically for ACTIVE items */}
+              {item.type === 'ACTIVE' && (
+                <div className="mt-4 pt-4 border-t border-slate-150 border-dashed">
+                  <span className="text-xs font-bold text-slate-400 uppercase mb-2 block">Practice: Make a Sentence</span>
+                  <div className="flex gap-2 items-start">
+                    <textarea
+                      value={customSentences[item.id] || ''}
+                      onChange={(e) => setCustomSentences(prev => ({...prev, [item.id]: e.target.value}))}
+                      placeholder={`Write a sentence using "${item.word_or_phrase}"...`}
+                      className="flex-1 text-sm p-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none h-14"
+                    />
+                    <button
+                      onClick={() => handleEvaluateSentence(item.id, item.word_or_phrase)}
+                      disabled={!customSentences[item.id] || sentenceFeedback[item.id]?.evaluating}
+                      className="px-4 py-2 bg-indigo-650 text-white rounded-lg font-medium text-xs hover:bg-indigo-700 disabled:opacity-50 transition-all shadow-sm"
+                    >
+                      {sentenceFeedback[item.id]?.evaluating ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Check'}
+                    </button>
+                  </div>
+                  {sentenceFeedback[item.id]?.result && (
+                    <div className={`mt-2 p-2.5 rounded-lg flex items-start gap-2 ${sentenceFeedback[item.id].result!.isCorrect ? 'bg-emerald-50 text-emerald-800 border border-emerald-100' : 'bg-rose-50 text-rose-800 border border-rose-100'}`}>
+                      {sentenceFeedback[item.id].result!.isCorrect ? <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0" /> : <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />}
+                      <p className="text-xs leading-relaxed">{sentenceFeedback[item.id].result!.feedback}</p>
+                    </div>
+                  )}
+                  {sentenceFeedback[item.id]?.error && (
+                    <div className="mt-2 p-2 text-xs text-red-600 bg-red-50 rounded border border-red-100">
+                      {sentenceFeedback[item.id].error}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* SRS Metadata */}
-              <div className="flex items-center gap-4 text-[10px] text-slate-400 font-mono">
+              <div className="flex items-center gap-4 mt-3 pt-3 border-t border-slate-100 text-[10px] text-slate-400 font-mono">
                 <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> Next Review: {new Date(item.nextReviewDate).toLocaleDateString()}</span>
                 <span>Reps: {item.repetitions}</span>
                 <span>Interval: {item.interval}d</span>

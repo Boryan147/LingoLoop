@@ -15,6 +15,7 @@ CREATE TABLE vocabulary (
   type vocabulary_type NOT NULL,
   context_hint TEXT NOT NULL,
   definition TEXT NOT NULL,
+  examples TEXT[] NOT NULL DEFAULT '{}',
   status vocabulary_status NOT NULL DEFAULT 'NEW',
   
   -- SRS Data (Ebbinghaus / SM-2)

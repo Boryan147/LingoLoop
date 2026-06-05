@@ -15,6 +15,7 @@ export interface VocabularyItem {
   context_hint: string;
   definition: string;
   status: VocabularyStatus;
+  examples: string[];
 
   // SRS Properties
   nextReviewDate: number; // Timestamp
