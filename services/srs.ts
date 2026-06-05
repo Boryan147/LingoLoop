@@ -73,3 +73,27 @@ export const getInitialSRSState = () => ({
   nextReviewDate: Date.now(), // Due immediately upon creation
   status: 'NEW' as const,
 });
+
+export const calculateItemRetention = (item: VocabularyItem, daysOffset: number = 0): number => {
+  const now = Date.now() + daysOffset * 24 * 60 * 60 * 1000;
+  
+  // Memory stability (S) corresponds to the current review interval.
+  // New items or items with 0 interval have a baseline stability of 0.5 days.
+  const stability = item.interval > 0 ? item.interval : 0.5;
+
+  // Last review time: nextReviewDate - interval
+  const lastReview = item.interval > 0
+    ? item.nextReviewDate - (item.interval * 24 * 60 * 60 * 1000)
+    : item.createdAt;
+
+  const elapsedDays = Math.max(0, (now - lastReview) / (24 * 60 * 60 * 1000));
+
+  // Ebbinghaus Forgetting Curve formula: R = e^(-t / S)
+  return Math.exp(-elapsedDays / stability);
+};
+
+export const calculateAverageRetention = (items: VocabularyItem[], daysOffset: number = 0): number => {
+  if (items.length === 0) return 1.0;
+  const total = items.reduce((acc, item) => acc + calculateItemRetention(item, daysOffset), 0);
+  return total / items.length;
+};

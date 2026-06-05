@@ -1,5 +1,6 @@
 import { VocabularyItem, StudyStats } from '../types';
 import { supabase } from './supabase';
+import { calculateAverageRetention } from './srs';
 
 const STORAGE_KEY = 'lingoloop_vocab_v2';
 
@@ -212,16 +213,14 @@ export const getStats = (items: VocabularyItem[]): StudyStats => {
   const activeItems = items.filter(item => item.type === 'ACTIVE').length;
   const passiveItems = items.filter(item => item.type === 'PASSIVE').length;
   
-  // Estimated retention rate based on successful repetitions
-  const totalRepetitions = items.reduce((acc, curr) => acc + curr.repetitions, 0);
-  const avgRetention = items.length ? Math.min(100, (totalRepetitions / (items.length * 5)) * 100) : 0;
+  const avgRetention = calculateAverageRetention(items, 0);
 
   return {
     totalItems: items.length,
     activeItems,
     passiveItems,
     itemsDue: due,
-    retentionRate: items.length ? Math.max(30, Math.round(avgRetention)) : 100,
+    retentionRate: items.length ? Math.round(avgRetention * 100) : 100,
     streak: 3 // Mock streak for demo
   };
 };

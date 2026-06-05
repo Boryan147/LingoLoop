@@ -3,6 +3,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { StudyStats, VocabularyItem } from '../types';
 import { Flame, Brain, Layers, ArrowUpRight, Download, Upload, Zap, Eye } from 'lucide-react';
 import { exportBackup, importBackup } from '../services/storage';
+import { calculateAverageRetention } from '../services/srs';
 
 interface DashboardProps {
   stats: StudyStats;
@@ -12,19 +13,35 @@ interface DashboardProps {
   onUpdate: () => void;
 }
 
-const forgettingCurveData = [
-  { time: '0m', retention: 100 },
-  { time: '20m', retention: 58 },
-  { time: '1h', retention: 44 },
-  { time: '9h', retention: 36 },
-  { time: '1d', retention: 33 },
-  { time: '2d', retention: 28 },
-  { time: '6d', retention: 25 },
-  { time: '31d', retention: 21 },
-];
-
 const Dashboard: React.FC<DashboardProps> = ({ stats, onReviewStart, items, userId, onUpdate }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const generateChartData = () => {
+    if (items.length === 0) {
+      return [
+        { day: 'Today', 'Standard Decay': 100, 'Your Retention': 100 },
+        { day: 'Day 1', 'Standard Decay': 58, 'Your Retention': 100 },
+        { day: 'Day 2', 'Standard Decay': 44, 'Your Retention': 100 },
+        { day: 'Day 3', 'Standard Decay': 36, 'Your Retention': 100 },
+        { day: 'Day 4', 'Standard Decay': 33, 'Your Retention': 100 },
+        { day: 'Day 5', 'Standard Decay': 28, 'Your Retention': 100 },
+        { day: 'Day 7', 'Standard Decay': 21, 'Your Retention': 100 },
+      ];
+    }
+
+    const days = [0, 1, 2, 3, 4, 5, 7];
+    return days.map(d => {
+      const standard = Math.round(Math.exp(-d / 1.5) * 100);
+      const personal = Math.round(calculateAverageRetention(items, d) * 100);
+      return {
+        day: d === 0 ? 'Today' : `Day ${d}`,
+        'Standard Decay': standard,
+        'Your Retention': personal,
+      };
+    });
+  };
+
+  const chartData = generateChartData();
 
   const handleExport = () => {
     const data = exportBackup(items);
@@ -170,31 +187,44 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, onReviewStart, items, user
           </h2>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={forgettingCurveData}>
+              <AreaChart data={chartData}>
                 <defs>
-                  <linearGradient id="colorRetention" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.1} />
+                  <linearGradient id="colorPersonal" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.15} />
                     <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="colorStandard" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#94a3b8" stopOpacity={0.05} />
+                    <stop offset="95%" stopColor="#94a3b8" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} unit="%" />
+                <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 11 }} unit="%" domain={[0, 100]} />
                 <Tooltip
-                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                 />
                 <Area
                   type="monotone"
-                  dataKey="retention"
+                  dataKey="Standard Decay"
+                  stroke="#94a3b8"
+                  strokeWidth={2}
+                  strokeDasharray="4 4"
+                  fill="url(#colorStandard)"
+                />
+                <Area
+                  type="monotone"
+                  dataKey="Your Retention"
                   stroke="#6366f1"
                   strokeWidth={3}
-                  fillOpacity={1}
-                  fill="url(#colorRetention)"
+                  fill="url(#colorPersonal)"
                 />
               </AreaChart>
             </ResponsiveContainer>
           </div>
-          <p className="text-xs text-slate-400 mt-4 text-center">Typical retention without spaced repetition.</p>
+          <p className="text-xs text-slate-500 mt-4 text-center">
+            Solid line shows <strong>Your Projected Retention</strong> over the next 7 days based on reviews. Dotted line shows standard decay without reviews.
+          </p>
         </div>
 
         {/* Vocabulary breakdown */}
