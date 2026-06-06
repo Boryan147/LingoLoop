@@ -74,7 +74,7 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
     setIsGenerating(true);
     setError(null);
     try {
-      const result = await generateIntakeAI(wordOrPhrase, vocabType, contextHint);
+      const result = await generateIntakeAI(wordOrPhrase, vocabType, contextHint, synonymsString.trim());
       if (vocabType === 'ACTIVE') {
         setWordOrPhrase(result.word_or_phrase);
       }

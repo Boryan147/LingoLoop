@@ -13,24 +13,29 @@ export interface IntakeResponse {
 export const generateIntakeAI = async (
   input: string,
   type: 'ACTIVE' | 'PASSIVE',
-  contextHint?: string
+  contextHint?: string,
+  synonym?: string
 ): Promise<IntakeResponse> => {
   try {
     const isPassive = type === 'PASSIVE';
     const contextPart = contextHint ? `Context/Trigger hint provided: "${contextHint}".` : '';
+    const synonymPart = synonym 
+      ? `The user also provided a synonym they want to associate/compare: "${synonym}". Crucially, compare the main expression and this synonym "${synonym}" in the definition output (e.g. explain the definition of the main expression first, and then add a clear note on when to use one vs the other). Also, return "${synonym}" in the synonyms array.`
+      : 'Do NOT suggest or generate any synonyms. Return an empty array [] in the synonyms field.';
 
     const systemPrompt = isPassive
       ? `You are an expert English tutor. The user is capturing a PASSIVE vocabulary item.
          Input expression: "${input}".
          ${contextPart}
-         Provide a clear, simple English explanation (under 25 words), 3 natural example sentences, and 2-4 common synonyms.`
+         ${synonymPart}
+         Provide a clear, simple English explanation (under 35 words) and 3 natural example sentences.`
       : `You are an expert English tutor. The user wants to capture an ACTIVE vocabulary item.
          Input thoughts (may be Chinese thoughts or basic English): "${input}".
          ${contextPart}
+         ${synonymPart}
          1. Provide the most authentic, natural English idiom, word, or phrase matching this thought.
-         2. A brief, 1-sentence explanation of its nuance (under 25 words).
-         3. Three natural example sentences using this English expression.
-         4. 2-4 common synonyms for this English expression.`;
+         2. A brief, 1-sentence explanation of its nuance/definition (under 35 words).
+         3. Three natural example sentences using this English expression.`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -48,7 +53,7 @@ export const generateIntakeAI = async (
             },
             definition: { 
               type: Type.STRING, 
-              description: "A clear, simple English explanation of the nuance/meaning (under 25 words)" 
+              description: "A clear, simple English explanation. If a synonym was provided, include a brief comparison note explaining the nuance difference between them." 
             },
             examples: { 
               type: Type.ARRAY, 
@@ -58,7 +63,7 @@ export const generateIntakeAI = async (
             synonyms: {
               type: Type.ARRAY,
               items: { type: Type.STRING },
-              description: "2-4 common synonyms for this expression"
+              description: "If a synonym was provided, return it in this array (e.g. ['synonym_word']). Otherwise, return an empty array []."
             }
           },
           required: ["word_or_phrase", "definition", "examples", "synonyms"]
