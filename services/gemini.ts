@@ -7,6 +7,7 @@ export interface IntakeResponse {
   word_or_phrase: string;
   definition: string;
   examples: string[];
+  synonyms: string[];
 }
 
 export const generateIntakeAI = async (
@@ -22,13 +23,14 @@ export const generateIntakeAI = async (
       ? `You are an expert English tutor. The user is capturing a PASSIVE vocabulary item.
          Input expression: "${input}".
          ${contextPart}
-         Provide a clear, simple English explanation (under 25 words) and 3 natural example sentences.`
+         Provide a clear, simple English explanation (under 25 words), 3 natural example sentences, and 2-4 common synonyms.`
       : `You are an expert English tutor. The user wants to capture an ACTIVE vocabulary item.
          Input thoughts (may be Chinese thoughts or basic English): "${input}".
          ${contextPart}
          1. Provide the most authentic, natural English idiom, word, or phrase matching this thought.
          2. A brief, 1-sentence explanation of its nuance (under 25 words).
-         3. Three natural example sentences using this English expression.`;
+         3. Three natural example sentences using this English expression.
+         4. 2-4 common synonyms for this English expression.`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -52,9 +54,14 @@ export const generateIntakeAI = async (
               type: Type.ARRAY, 
               items: { type: Type.STRING },
               description: "Exactly three natural English example sentences showcasing proper usage"
+            },
+            synonyms: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              description: "2-4 common synonyms for this expression"
             }
           },
-          required: ["word_or_phrase", "definition", "examples"]
+          required: ["word_or_phrase", "definition", "examples", "synonyms"]
         }
       }
     });
@@ -63,7 +70,8 @@ export const generateIntakeAI = async (
     return {
       word_or_phrase: result.word_or_phrase || input,
       definition: result.definition || 'Definition unavailable.',
-      examples: result.examples || []
+      examples: result.examples || [],
+      synonyms: result.synonyms || []
     };
   } catch (error) {
     console.error("Gemini Intake AI Error:", error);

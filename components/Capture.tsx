@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { VocabularyItem } from '../types';
 import { generateIntakeAI, evaluateSentence } from '../services/gemini';
 import { getInitialSRSState } from '../services/srs';
-import { Plus, Loader2, Book, Sparkles, AlertCircle, Trash2, ArrowLeftRight, Search, Zap, Eye, Calendar, CheckCircle2, ArrowUp } from 'lucide-react';
+import { Plus, Loader2, Book, Sparkles, AlertCircle, Trash2, ArrowLeftRight, Search, Zap, Eye, Calendar, CheckCircle2, ArrowUp, Edit, X } from 'lucide-react';
 import * as storage from '../services/storage';
 
 interface CaptureProps {
@@ -17,6 +17,8 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
   const [contextHint, setContextHint] = useState('');
   const [definition, setDefinition] = useState('');
   const [examples, setExamples] = useState<string[]>([]);
+  const [synonymsString, setSynonymsString] = useState('');
+  const [editingItem, setEditingItem] = useState<VocabularyItem | null>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'ALL' | 'ACTIVE' | 'PASSIVE'>('ALL');
@@ -78,6 +80,7 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
       }
       setDefinition(result.definition);
       setExamples(result.examples);
+      setSynonymsString(result.synonyms ? result.synonyms.join(', ') : '');
     } catch (err: any) {
       setError(err.message || 'Failed to generate content with AI.');
     } finally {
@@ -93,30 +96,74 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
     setError(null);
 
     try {
-      const newItem: VocabularyItem = {
-        id: storage.generateId(),
-        user_id: userId,
-        word_or_phrase: wordOrPhrase.trim(),
-        type: vocabType,
-        context_hint: contextHint.trim(),
-        definition: definition.trim(),
-        examples: examples,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        ...getInitialSRSState(),
-      };
+      const parsedSynonyms = synonymsString
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean);
 
-      await storage.saveItem(newItem, userId);
+      if (editingItem) {
+        // Update existing item
+        const updatedItem: VocabularyItem = {
+          ...editingItem,
+          word_or_phrase: wordOrPhrase.trim(),
+          type: vocabType,
+          context_hint: contextHint.trim(),
+          definition: definition.trim(),
+          examples: examples,
+          synonyms: parsedSynonyms,
+          updatedAt: Date.now(),
+        };
+        await storage.updateItem(updatedItem, userId);
+        setEditingItem(null);
+      } else {
+        // Create new item
+        const newItem: VocabularyItem = {
+          id: storage.generateId(),
+          user_id: userId,
+          word_or_phrase: wordOrPhrase.trim(),
+          type: vocabType,
+          context_hint: contextHint.trim(),
+          definition: definition.trim(),
+          examples: examples,
+          synonyms: parsedSynonyms,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          ...getInitialSRSState(),
+        };
+        await storage.saveItem(newItem, userId);
+      }
+
       setWordOrPhrase('');
       setContextHint('');
       setDefinition('');
       setExamples([]);
+      setSynonymsString('');
       onUpdate();
     } catch (err: any) {
       setError(err.message || 'Failed to save vocabulary item.');
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleStartEdit = (item: VocabularyItem) => {
+    setEditingItem(item);
+    setWordOrPhrase(item.word_or_phrase);
+    setVocabType(item.type);
+    setContextHint(item.context_hint);
+    setDefinition(item.definition);
+    setExamples(item.examples || []);
+    setSynonymsString(item.synonyms ? item.synonyms.join(', ') : '');
+    scrollToTop();
+  };
+
+  const handleCancelEdit = () => {
+    setEditingItem(null);
+    setWordOrPhrase('');
+    setContextHint('');
+    setDefinition('');
+    setExamples([]);
+    setSynonymsString('');
   };
 
   const handleToggleType = async (item: VocabularyItem) => {
@@ -153,7 +200,8 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
       const matchesSearch = 
         (item.word_or_phrase || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
         (item.definition || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (item.context_hint || '').toLowerCase().includes(searchQuery.toLowerCase());
+        (item.context_hint || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (item.synonyms || []).some(s => s.toLowerCase().includes(searchQuery.toLowerCase()));
       
       const matchesType = filterType === 'ALL' || item.type === filterType;
       
@@ -275,20 +323,52 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
             </div>
           )}
 
+          {/* Synonyms */}
+          <div>
+            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">
+              Synonyms (Optional, comma separated)
+            </label>
+            <input
+              type="text"
+              value={synonymsString}
+              onChange={(e) => setSynonymsString(e.target.value)}
+              placeholder="e.g. avoid, elude, escape"
+              className="w-full text-sm p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+              disabled={isSaving}
+            />
+          </div>
+
           {error && (
             <p className="text-red-500 text-xs flex items-center gap-1 mt-2">
               <AlertCircle className="w-3.5 h-3.5" /> {error}
             </p>
           )}
 
-          <button
-            type="submit"
-            disabled={isSaving || isGenerating || !wordOrPhrase || !definition}
-            className="w-full py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-          >
-            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-            Save Vocabulary Item
-          </button>
+          <div className="flex gap-3">
+            <button
+              type="submit"
+              disabled={isSaving || isGenerating || !wordOrPhrase || !definition}
+              className="flex-1 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+            >
+              {isSaving ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : editingItem ? (
+                <Edit className="w-4 h-4" />
+              ) : (
+                <Plus className="w-4 h-4" />
+              )}
+              {editingItem ? 'Update Vocabulary Item' : 'Save Vocabulary Item'}
+            </button>
+            {editingItem && (
+              <button
+                type="button"
+                onClick={handleCancelEdit}
+                className="px-6 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl transition-all"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
         </form>
       </div>
 
@@ -372,6 +452,13 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
 
                 <div className="flex gap-2 items-center">
                   <button
+                    onClick={() => handleStartEdit(item)}
+                    className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all sm:opacity-0 group-hover:opacity-100"
+                    title="Edit item"
+                  >
+                    <Edit className="w-4 h-4" />
+                  </button>
+                  <button
                     onClick={() => handleDelete(item.id)}
                     className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all sm:opacity-0 group-hover:opacity-100"
                     title="Delete item"
@@ -407,6 +494,20 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
                       <li key={idx}>{ex}</li>
                     ))}
                   </ul>
+                </div>
+              )}
+
+              {/* Synonyms */}
+              {item.synonyms && item.synonyms.length > 0 && (
+                <div className="mb-4">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block tracking-wider mb-1">Synonyms</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {item.synonyms.map((syn, idx) => (
+                      <span key={idx} className="text-xs bg-slate-100 text-slate-650 border border-slate-200/80 px-2.5 py-0.5 rounded-lg font-medium">
+                        {syn}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               )}
 

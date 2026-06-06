@@ -16,6 +16,7 @@ export interface VocabularyItem {
   definition: string;
   status: VocabularyStatus;
   examples: string[];
+  synonyms: string[];
 
   // SRS Properties
   nextReviewDate: number; // Timestamp

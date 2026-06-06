@@ -277,6 +277,18 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
                           </ul>
                         </div>
                       )}
+                      {activeQueue[activeIndex].synonyms && activeQueue[activeIndex].synonyms.length > 0 && (
+                        <div className="bg-white/10 p-4 rounded-xl border border-white/10 animate-in fade-in">
+                          <span className="text-[10px] font-bold text-yellow-300 uppercase tracking-wider block mb-1">Synonyms</span>
+                          <div className="flex flex-wrap gap-1.5 mt-1.5">
+                            {activeQueue[activeIndex].synonyms.map((syn, idx) => (
+                              <span key={idx} className="text-xs bg-white/20 px-2 py-0.5 rounded-md font-medium">
+                                {syn}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -380,6 +392,19 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
                             <div className="bg-slate-50 p-2.5 rounded-lg text-xs text-slate-500">
                               <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide mb-0.5">Original context</span>
                               {item.context_hint}
+                            </div>
+                          )}
+
+                          {item.synonyms && item.synonyms.length > 0 && (
+                            <div className="bg-slate-50 p-2.5 rounded-lg text-xs text-slate-600 border border-slate-150 animate-in fade-in">
+                              <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide mb-1">Synonyms</span>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {item.synonyms.map((syn, idx) => (
+                                  <span key={idx} className="text-xs bg-white text-slate-650 border border-slate-200/80 px-2 py-0.5 rounded-md font-medium">
+                                    {syn}
+                                  </span>
+                                ))}
+                              </div>
                             </div>
                           )}
 
