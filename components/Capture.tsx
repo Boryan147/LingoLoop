@@ -12,13 +12,63 @@ interface CaptureProps {
 }
 
 const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
-  const [wordOrPhrase, setWordOrPhrase] = useState('');
-  const [vocabType, setVocabType] = useState<'ACTIVE' | 'PASSIVE'>('ACTIVE');
-  const [contextHint, setContextHint] = useState('');
-  const [definition, setDefinition] = useState('');
-  const [examples, setExamples] = useState<string[]>([]);
-  const [synonymsString, setSynonymsString] = useState('');
-  const [editingItem, setEditingItem] = useState<VocabularyItem | null>(null);
+  // Load draft from localStorage on initial render
+  const [wordOrPhrase, setWordOrPhrase] = useState(() => {
+    try {
+      const draft = localStorage.getItem('lingoloop_capture_draft');
+      return draft ? JSON.parse(draft).wordOrPhrase || '' : '';
+    } catch {
+      return '';
+    }
+  });
+  const [vocabType, setVocabType] = useState<'ACTIVE' | 'PASSIVE'>(() => {
+    try {
+      const draft = localStorage.getItem('lingoloop_capture_draft');
+      return draft ? JSON.parse(draft).vocabType || 'ACTIVE' : 'ACTIVE';
+    } catch {
+      return 'ACTIVE';
+    }
+  });
+  const [contextHint, setContextHint] = useState(() => {
+    try {
+      const draft = localStorage.getItem('lingoloop_capture_draft');
+      return draft ? JSON.parse(draft).contextHint || '' : '';
+    } catch {
+      return '';
+    }
+  });
+  const [definition, setDefinition] = useState(() => {
+    try {
+      const draft = localStorage.getItem('lingoloop_capture_draft');
+      return draft ? JSON.parse(draft).definition || '' : '';
+    } catch {
+      return '';
+    }
+  });
+  const [examples, setExamples] = useState<string[]>(() => {
+    try {
+      const draft = localStorage.getItem('lingoloop_capture_draft');
+      return draft ? JSON.parse(draft).examples || [] : [];
+    } catch {
+      return [];
+    }
+  });
+  const [synonymsString, setSynonymsString] = useState(() => {
+    try {
+      const draft = localStorage.getItem('lingoloop_capture_draft');
+      return draft ? JSON.parse(draft).synonymsString || '' : '';
+    } catch {
+      return '';
+    }
+  });
+  const [editingItem, setEditingItem] = useState<VocabularyItem | null>(() => {
+    try {
+      const draft = localStorage.getItem('lingoloop_capture_draft_editing');
+      return draft ? JSON.parse(draft) : null;
+    } catch {
+      return null;
+    }
+  });
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'ALL' | 'ACTIVE' | 'PASSIVE'>('ALL');
@@ -32,6 +82,28 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
   const [sentenceFeedback, setSentenceFeedback] = useState<Record<string, { evaluating: boolean, result?: { isCorrect: boolean, feedback: string }, error?: string }>>({});
 
   const [showScrollTop, setShowScrollTop] = useState(false);
+
+  // Save draft whenever form values change
+  useEffect(() => {
+    const draft = {
+      wordOrPhrase,
+      vocabType,
+      contextHint,
+      definition,
+      examples,
+      synonymsString
+    };
+    localStorage.setItem('lingoloop_capture_draft', JSON.stringify(draft));
+  }, [wordOrPhrase, vocabType, contextHint, definition, examples, synonymsString]);
+
+  // Save editingItem draft
+  useEffect(() => {
+    if (editingItem) {
+      localStorage.setItem('lingoloop_capture_draft_editing', JSON.stringify(editingItem));
+    } else {
+      localStorage.removeItem('lingoloop_capture_draft_editing');
+    }
+  }, [editingItem]);
 
   useEffect(() => {
     const mainEl = document.querySelector('main');
@@ -88,6 +160,17 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
     }
   };
 
+  const clearDraft = () => {
+    localStorage.removeItem('lingoloop_capture_draft');
+    localStorage.removeItem('lingoloop_capture_draft_editing');
+    setWordOrPhrase('');
+    setContextHint('');
+    setDefinition('');
+    setExamples([]);
+    setSynonymsString('');
+    setEditingItem(null);
+  };
+
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!wordOrPhrase.trim() || !definition.trim()) return;
@@ -114,7 +197,6 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
           updatedAt: Date.now(),
         };
         await storage.updateItem(updatedItem, userId);
-        setEditingItem(null);
       } else {
         // Create new item
         const newItem: VocabularyItem = {
@@ -133,11 +215,7 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
         await storage.saveItem(newItem, userId);
       }
 
-      setWordOrPhrase('');
-      setContextHint('');
-      setDefinition('');
-      setExamples([]);
-      setSynonymsString('');
+      clearDraft();
       onUpdate();
     } catch (err: any) {
       setError(err.message || 'Failed to save vocabulary item.');
@@ -158,12 +236,7 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
   };
 
   const handleCancelEdit = () => {
-    setEditingItem(null);
-    setWordOrPhrase('');
-    setContextHint('');
-    setDefinition('');
-    setExamples([]);
-    setSynonymsString('');
+    clearDraft();
   };
 
   const handleToggleType = async (item: VocabularyItem) => {
