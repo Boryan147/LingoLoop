@@ -3,6 +3,19 @@ import { VocabularyItem } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
 
+const callWithRetry = async <T>(fn: () => Promise<T>, retries: number = 3, delay: number = 1000): Promise<T> => {
+  try {
+    return await fn();
+  } catch (error) {
+    if (retries <= 1) {
+      throw error;
+    }
+    console.warn(`Gemini call failed, retrying in ${delay}ms...`, error);
+    await new Promise(resolve => setTimeout(resolve, delay));
+    return callWithRetry(fn, retries - 1, delay * 2);
+  }
+};
+
 export interface IntakeResponse {
   word_or_phrase: string;
   definition: string;
@@ -42,8 +55,8 @@ export const generateIntakeAI = async (
          3. Generate exactly 3 example sentences showing usage in DIFFERENT conversational tones (Casual/Colloquial, Polite/Professional, and Direct/Emphatic). Prefix each sentence with its tone label, e.g. "[Casual] ...", "[Polite] ...", "[Direct] ...".
          4. Provide a list of 3-5 related words or expressions in the same word family or lexical cohort (cognates, alternate spoken chunks, or related parts of speech).`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+    const response = await callWithRetry(() => ai.models.generateContent({
+      model: 'gemini-2.5-flash',
       contents: systemPrompt,
       config: {
         responseMimeType: "application/json",
@@ -79,7 +92,7 @@ export const generateIntakeAI = async (
           required: ["word_or_phrase", "definition", "examples", "synonyms", "word_family"]
         }
       }
-    });
+    }));
 
     const result = JSON.parse(response.text || '{}');
     return {
@@ -98,11 +111,11 @@ export const generateIntakeAI = async (
 export const generateDailyPassiveContext = async (items: VocabularyItem[]): Promise<string> => {
   try {
     const wordsList = items.map(item => item.word_or_phrase).join(', ');
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+    const response = await callWithRetry(() => ai.models.generateContent({
+      model: 'gemini-2.5-flash',
       contents: `Write a short, engaging, and cohesive micro-story or dialogue (under 100 words) using these specific words naturally: ${wordsList}.
       IMPORTANT: Wrap each of the target words/phrases in <strong> tags in the story. Keep it natural and simple for learning.`,
-    });
+    }));
     return response.text?.trim() || "Failed to generate story.";
   } catch (error) {
     console.error("Gemini Micro-Story Error:", error);
@@ -148,8 +161,8 @@ export const playBrowserSpeech = (text: string) => {
 
 export const evaluateSentence = async (wordOrPhrase: string, sentence: string) => {
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+    const response = await callWithRetry(() => ai.models.generateContent({
+      model: 'gemini-2.5-flash',
       contents: `Evaluate the user's sentence for the proper usage of the expression "${wordOrPhrase}".
       User's sentence: "${sentence}"
       Return a JSON object with:
@@ -167,7 +180,7 @@ export const evaluateSentence = async (wordOrPhrase: string, sentence: string) =
           required: ["isCorrect", "feedback"],
         }
       }
-    });
+    }));
 
     return JSON.parse(response.text || '{}');
   } catch (error) {
