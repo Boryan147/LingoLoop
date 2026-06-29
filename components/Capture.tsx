@@ -172,7 +172,6 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
       setDefinition(result.definition);
       setExamplesString(result.examples ? result.examples.join('\n') : '');
       setSynonymsString(result.synonyms ? result.synonyms.join(', ') : '');
-      setWordFamilyString(result.word_family ? result.word_family.join(', ') : '');
     } catch (err: any) {
       setError(err.message || 'Failed to generate content with AI.');
     } finally {

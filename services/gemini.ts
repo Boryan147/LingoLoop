@@ -42,7 +42,7 @@ export const generateIntakeAI = async (
          Input expression: "${input}".
          ${contextPart}
          ${synonymPart}
-         Provide a clear, simple English explanation (under 35 words), 3 natural example sentences, and 3-5 related words in the same word family.`
+         Provide a clear, simple English explanation (under 35 words) and 3 natural example sentences.`
       : `You are an expert English tutor. The user wants to capture an ACTIVE vocabulary item to learn to speak naturally and effortlessly.
          Input thought/expression to translate (Chinese or simple English): "${input}".
          ${contextPart}
@@ -52,8 +52,7 @@ export const generateIntakeAI = async (
          1. What is the most authentic, natural, and "brainless" (automatic) spoken expression or sentence chunk for this?
             - CRITICAL: If the input represents a common everyday life concept, scenario, or thought, generate a ready-to-use sentence chunk/template (e.g. "I think this method has some problems", "It's not that big of a deal", or "Let's call it a day") instead of just isolated words or phrases. We want functional, pre-assembled chunks the user can use instantly without constructing sentences in their head.
          2. Provide a brief, 1-sentence explanation of its conversational usage, nuance, and scenario (under 35 words).
-         3. Generate exactly 3 example sentences showing usage in DIFFERENT conversational tones (Casual/Colloquial, Polite/Professional, and Direct/Emphatic). Prefix each sentence with its tone label, e.g. "[Casual] ...", "[Polite] ...", "[Direct] ...".
-         4. Provide a list of 3-5 related words or expressions in the same word family or lexical cohort (cognates, alternate spoken chunks, or related parts of speech).`;
+         3. Generate exactly 3 example sentences showing usage in DIFFERENT conversational tones (Casual/Colloquial, Polite/Professional, and Direct/Emphatic). Prefix each sentence with its tone label, e.g. "[Casual] ...", "[Polite] ...", "[Direct] ...".`;
 
     const response = await callWithRetry(() => ai.models.generateContent({
       model: 'gemini-2.5-flash',
@@ -82,14 +81,9 @@ export const generateIntakeAI = async (
               type: Type.ARRAY,
               items: { type: Type.STRING },
               description: "If a synonym was provided, return it in this array (e.g. ['synonym_word']). Otherwise, return an empty array []."
-            },
-            word_family: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-              description: "A list of 3-5 related words in the same word family (cognates, different parts of speech of the same root word, e.g. ['act', 'active', 'activity'])"
             }
           },
-          required: ["word_or_phrase", "definition", "examples", "synonyms", "word_family"]
+          required: ["word_or_phrase", "definition", "examples", "synonyms"]
         }
       }
     }));
@@ -100,7 +94,7 @@ export const generateIntakeAI = async (
       definition: result.definition || 'Definition unavailable.',
       examples: result.examples || [],
       synonyms: result.synonyms || [],
-      word_family: result.word_family || []
+      word_family: []
     };
   } catch (error) {
     console.error("Gemini Intake AI Error:", error);
