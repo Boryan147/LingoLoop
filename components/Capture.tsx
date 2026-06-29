@@ -45,18 +45,36 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
       return '';
     }
   });
-  const [examples, setExamples] = useState<string[]>(() => {
+  const [examplesString, setExamplesString] = useState(() => {
     try {
       const draft = localStorage.getItem('lingoloop_capture_draft');
-      return draft ? JSON.parse(draft).examples || [] : [];
+      if (draft) {
+        const parsed = JSON.parse(draft);
+        if (parsed.examplesString !== undefined) return parsed.examplesString;
+        if (Array.isArray(parsed.examples)) return parsed.examples.join('\n');
+      }
+      return '';
     } catch {
-      return [];
+      return '';
     }
   });
   const [synonymsString, setSynonymsString] = useState(() => {
     try {
       const draft = localStorage.getItem('lingoloop_capture_draft');
       return draft ? JSON.parse(draft).synonymsString || '' : '';
+    } catch {
+      return '';
+    }
+  });
+  const [wordFamilyString, setWordFamilyString] = useState(() => {
+    try {
+      const draft = localStorage.getItem('lingoloop_capture_draft');
+      if (draft) {
+        const parsed = JSON.parse(draft);
+        if (parsed.wordFamilyString !== undefined) return parsed.wordFamilyString;
+        if (Array.isArray(parsed.word_family)) return parsed.word_family.join(', ');
+      }
+      return '';
     } catch {
       return '';
     }
@@ -90,11 +108,12 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
       vocabType,
       contextHint,
       definition,
-      examples,
-      synonymsString
+      examplesString,
+      synonymsString,
+      wordFamilyString
     };
     localStorage.setItem('lingoloop_capture_draft', JSON.stringify(draft));
-  }, [wordOrPhrase, vocabType, contextHint, definition, examples, synonymsString]);
+  }, [wordOrPhrase, vocabType, contextHint, definition, examplesString, synonymsString, wordFamilyString]);
 
   // Save editingItem draft
   useEffect(() => {
@@ -151,8 +170,9 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
         setWordOrPhrase(result.word_or_phrase);
       }
       setDefinition(result.definition);
-      setExamples(result.examples);
+      setExamplesString(result.examples ? result.examples.join('\n') : '');
       setSynonymsString(result.synonyms ? result.synonyms.join(', ') : '');
+      setWordFamilyString(result.word_family ? result.word_family.join(', ') : '');
     } catch (err: any) {
       setError(err.message || 'Failed to generate content with AI.');
     } finally {
@@ -166,8 +186,9 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
     setWordOrPhrase('');
     setContextHint('');
     setDefinition('');
-    setExamples([]);
+    setExamplesString('');
     setSynonymsString('');
+    setWordFamilyString('');
     setEditingItem(null);
   };
 
@@ -184,6 +205,16 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
         .map(s => s.trim())
         .filter(Boolean);
 
+      const parsedExamples = examplesString
+        .split('\n')
+        .map(ex => ex.trim())
+        .filter(Boolean);
+
+      const parsedWordFamily = wordFamilyString
+        .split(',')
+        .map(wf => wf.trim())
+        .filter(Boolean);
+
       if (editingItem) {
         // Update existing item
         const updatedItem: VocabularyItem = {
@@ -192,8 +223,9 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
           type: vocabType,
           context_hint: contextHint.trim(),
           definition: definition.trim(),
-          examples: examples,
+          examples: parsedExamples,
           synonyms: parsedSynonyms,
+          word_family: parsedWordFamily,
           updatedAt: Date.now(),
         };
         await storage.updateItem(updatedItem, userId);
@@ -206,8 +238,9 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
           type: vocabType,
           context_hint: contextHint.trim(),
           definition: definition.trim(),
-          examples: examples,
+          examples: parsedExamples,
           synonyms: parsedSynonyms,
+          word_family: parsedWordFamily,
           createdAt: Date.now(),
           updatedAt: Date.now(),
           ...getInitialSRSState(),
@@ -230,8 +263,9 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
     setVocabType(item.type);
     setContextHint(item.context_hint);
     setDefinition(item.definition);
-    setExamples(item.examples || []);
+    setExamplesString(item.examples ? item.examples.join('\n') : '');
     setSynonymsString(item.synonyms ? item.synonyms.join(', ') : '');
+    setWordFamilyString(item.word_family ? item.word_family.join(', ') : '');
     scrollToTop();
   };
 
@@ -322,7 +356,7 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
                   type="button"
                   onClick={() => {
                     setVocabType('ACTIVE');
-                    setExamples([]);
+                    setExamplesString('');
                   }}
                   className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${vocabType === 'ACTIVE' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                 >
@@ -333,7 +367,7 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
                   type="button"
                   onClick={() => {
                     setVocabType('PASSIVE');
-                    setExamples([]);
+                    setExamplesString('');
                   }}
                   className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${vocabType === 'PASSIVE' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                 >
@@ -384,31 +418,49 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
             />
           </div>
 
-          {/* Examples Preview */}
-          {examples.length > 0 && (
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/60">
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">AI Generated Examples</label>
-              <ul className="list-disc pl-4 space-y-1 text-sm text-slate-600">
-                {examples.map((ex, idx) => (
-                  <li key={idx}>{ex}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* Synonyms */}
+          {/* Example Sentences */}
           <div>
             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">
-              Synonyms (Optional, comma separated)
+              Example Sentences (Optional, one per line)
             </label>
-            <input
-              type="text"
-              value={synonymsString}
-              onChange={(e) => setSynonymsString(e.target.value)}
-              placeholder="e.g. avoid, elude, escape"
+            <textarea
+              value={examplesString}
+              onChange={(e) => setExamplesString(e.target.value)}
+              placeholder="e.g. This is a natural example sentence.&#10;This is another example."
+              rows={3}
               className="w-full text-sm p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
               disabled={isSaving}
             />
+          </div>
+
+          {/* Synonyms & Word Family grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">
+                Synonyms (Optional, comma separated)
+              </label>
+              <input
+                type="text"
+                value={synonymsString}
+                onChange={(e) => setSynonymsString(e.target.value)}
+                placeholder="e.g. avoid, elude, escape"
+                className="w-full text-sm p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                disabled={isSaving}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">
+                Word Family (Optional, comma separated)
+              </label>
+              <input
+                type="text"
+                value={wordFamilyString}
+                onChange={(e) => setWordFamilyString(e.target.value)}
+                placeholder="e.g. act, active, activity"
+                className="w-full text-sm p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                disabled={isSaving}
+              />
+            </div>
           </div>
 
           {error && (
@@ -578,6 +630,20 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
                     {item.synonyms.map((syn, idx) => (
                       <span key={idx} className="text-xs bg-slate-100 text-slate-650 border border-slate-200/80 px-2.5 py-0.5 rounded-lg font-medium">
                         {syn}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Word Family */}
+              {item.word_family && item.word_family.length > 0 && (
+                <div className="mb-4">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block tracking-wider mb-1">Word Family</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {item.word_family.map((member, idx) => (
+                      <span key={idx} className="text-xs bg-indigo-50/50 text-indigo-700 border border-indigo-100/80 px-2.5 py-0.5 rounded-lg font-medium animate-in fade-in duration-300">
+                        {member}
                       </span>
                     ))}
                   </div>

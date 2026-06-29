@@ -21,6 +21,7 @@ CREATE TABLE vocabulary (
   definition TEXT NOT NULL,
   examples TEXT[] NOT NULL DEFAULT '{}',
   synonyms TEXT[] NOT NULL DEFAULT '{}',
+  word_family TEXT[] NOT NULL DEFAULT '{}',
   status vocabulary_status NOT NULL DEFAULT 'NEW',
   
   -- SRS Data (Ebbinghaus / SM-2)

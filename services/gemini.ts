@@ -8,6 +8,7 @@ export interface IntakeResponse {
   definition: string;
   examples: string[];
   synonyms: string[];
+  word_family: string[];
 }
 
 export const generateIntakeAI = async (
@@ -28,14 +29,15 @@ export const generateIntakeAI = async (
          Input expression: "${input}".
          ${contextPart}
          ${synonymPart}
-         Provide a clear, simple English explanation (under 35 words) and 3 natural example sentences.`
+         Provide a clear, simple English explanation (under 35 words), 3 natural example sentences, and 3-5 related words in the same word family.`
       : `You are an expert English tutor. The user wants to capture an ACTIVE vocabulary item.
          Input thoughts (may be Chinese thoughts or basic English): "${input}".
          ${contextPart}
          ${synonymPart}
          1. Provide the most authentic, natural English idiom, word, or phrase matching this thought.
          2. A brief, 1-sentence explanation of its nuance/definition (under 35 words).
-         3. Three natural example sentences using this English expression.`;
+         3. Three natural example sentences using this English expression.
+         4. A list of 3-5 related words in the same word family (cognates, other parts of speech).`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -64,9 +66,14 @@ export const generateIntakeAI = async (
               type: Type.ARRAY,
               items: { type: Type.STRING },
               description: "If a synonym was provided, return it in this array (e.g. ['synonym_word']). Otherwise, return an empty array []."
+            },
+            word_family: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              description: "A list of 3-5 related words in the same word family (cognates, different parts of speech of the same root word, e.g. ['act', 'active', 'activity'])"
             }
           },
-          required: ["word_or_phrase", "definition", "examples", "synonyms"]
+          required: ["word_or_phrase", "definition", "examples", "synonyms", "word_family"]
         }
       }
     });
@@ -76,7 +83,8 @@ export const generateIntakeAI = async (
       word_or_phrase: result.word_or_phrase || input,
       definition: result.definition || 'Definition unavailable.',
       examples: result.examples || [],
-      synonyms: result.synonyms || []
+      synonyms: result.synonyms || [],
+      word_family: result.word_family || []
     };
   } catch (error) {
     console.error("Gemini Intake AI Error:", error);

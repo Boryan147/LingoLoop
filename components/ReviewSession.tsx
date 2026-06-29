@@ -289,6 +289,18 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
                           </div>
                         </div>
                       )}
+                      {activeQueue[activeIndex].word_family && activeQueue[activeIndex].word_family.length > 0 && (
+                        <div className="bg-white/15 p-4 rounded-xl border border-white/10 animate-in fade-in">
+                          <span className="text-[10px] font-bold text-yellow-300 uppercase tracking-wider block mb-1">Word Family</span>
+                          <div className="flex flex-wrap gap-1.5 mt-1.5">
+                            {activeQueue[activeIndex].word_family.map((member, idx) => (
+                              <span key={idx} className="text-xs bg-white/25 px-2 py-0.5 rounded-md font-medium">
+                                {member}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -396,12 +408,24 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
                           )}
 
                           {item.synonyms && item.synonyms.length > 0 && (
-                            <div className="bg-slate-50 p-2.5 rounded-lg text-xs text-slate-600 border border-slate-150 animate-in fade-in">
+                            <div className="bg-slate-50 p-2.5 rounded-lg text-xs text-slate-655 border border-slate-200/80 px-2 py-0.5 rounded-md font-medium">
                               <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide mb-1">Synonyms</span>
                               <div className="flex flex-wrap gap-1 mt-1">
                                 {item.synonyms.map((syn, idx) => (
                                   <span key={idx} className="text-xs bg-white text-slate-650 border border-slate-200/80 px-2 py-0.5 rounded-md font-medium">
                                     {syn}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {item.word_family && item.word_family.length > 0 && (
+                            <div className="bg-slate-50 p-2.5 rounded-lg text-xs text-slate-650 border border-slate-150 animate-in fade-in">
+                              <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide mb-1">Word Family</span>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {item.word_family.map((member, idx) => (
+                                  <span key={idx} className="text-xs bg-white text-slate-650 border border-slate-200/80 px-2 py-0.5 rounded-md font-medium">
+                                    {member}
                                   </span>
                                 ))}
                               </div>
