@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Navbar from './components/Navbar';
 import Dashboard from './components/Dashboard';
 import Capture from './components/Capture';
@@ -22,14 +22,19 @@ const App: React.FC = () => {
   });
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const lastUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     // Check active sessions and subscribe to auth changes
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session) {
-        handlePostLogin(session.user.id);
+        if (lastUserIdRef.current !== session.user.id) {
+          lastUserIdRef.current = session.user.id;
+          handlePostLogin(session.user.id);
+        }
       } else {
+        lastUserIdRef.current = null;
         refreshData();
         setLoading(false);
       }
@@ -40,8 +45,12 @@ const App: React.FC = () => {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session) {
-        handlePostLogin(session.user.id);
+        if (lastUserIdRef.current !== session.user.id) {
+          lastUserIdRef.current = session.user.id;
+          handlePostLogin(session.user.id);
+        }
       } else {
+        lastUserIdRef.current = null;
         setItems([]);
         setStats({ totalItems: 0, activeItems: 0, passiveItems: 0, itemsDue: 0, retentionRate: 100, streak: 0 });
         setLoading(false);
