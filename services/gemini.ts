@@ -30,14 +30,17 @@ export const generateIntakeAI = async (
          ${contextPart}
          ${synonymPart}
          Provide a clear, simple English explanation (under 35 words), 3 natural example sentences, and 3-5 related words in the same word family.`
-      : `You are an expert English tutor. The user wants to capture an ACTIVE vocabulary item.
-         Input thoughts (may be Chinese thoughts or basic English): "${input}".
+      : `You are an expert English tutor. The user wants to capture an ACTIVE vocabulary item to learn to speak naturally and effortlessly.
+         Input thought/expression to translate (Chinese or simple English): "${input}".
          ${contextPart}
          ${synonymPart}
-         1. Provide the most authentic, natural English idiom, word, or phrase matching this thought.
-         2. A brief, 1-sentence explanation of its nuance/definition (under 35 words).
-         3. Three natural example sentences using this English expression.
-         4. A list of 3-5 related words in the same word family (cognates, other parts of speech).`;
+         
+         Instructions:
+         1. What is the most authentic, natural, and "brainless" (automatic) spoken expression or sentence chunk for this?
+            - CRITICAL: If the input represents a common everyday life concept, scenario, or thought, generate a ready-to-use sentence chunk/template (e.g. "I think this method has some problems", "It's not that big of a deal", or "Let's call it a day") instead of just isolated words or phrases. We want functional, pre-assembled chunks the user can use instantly without constructing sentences in their head.
+         2. Provide a brief, 1-sentence explanation of its conversational usage, nuance, and scenario (under 35 words).
+         3. Generate exactly 3 example sentences showing usage in DIFFERENT conversational tones (Casual/Colloquial, Polite/Professional, and Direct/Emphatic). Prefix each sentence with its tone label, e.g. "[Casual] ...", "[Polite] ...", "[Direct] ...".
+         4. Provide a list of 3-5 related words or expressions in the same word family or lexical cohort (cognates, alternate spoken chunks, or related parts of speech).`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -51,16 +54,16 @@ export const generateIntakeAI = async (
               type: Type.STRING, 
               description: isPassive 
                 ? "Return the input word/phrase exactly as provided" 
-                : "The authentic English idiom/phrase/word matching the input Chinese/English thought"
+                : "The authentic spoken English expression, idiom, or sentence chunk matching the input thought (prefer full ready-to-use sentence chunks for common concepts)"
             },
             definition: { 
               type: Type.STRING, 
-              description: "A clear, simple English explanation. If a synonym was provided, include a brief comparison note explaining the nuance difference between them." 
+              description: "A clear, simple English explanation of the nuance and conversational usage. If a synonym was provided, include a brief comparison note explaining the nuance difference between them." 
             },
             examples: { 
               type: Type.ARRAY, 
               items: { type: Type.STRING },
-              description: "Exactly three natural English example sentences showcasing proper usage"
+              description: "Exactly three natural spoken example sentences showing usage with different conversational tones (Casual, Polite/Professional, Direct), prefixed with their tone label, e.g., '[Casual] This is a test.'"
             },
             synonyms: {
               type: Type.ARRAY,
