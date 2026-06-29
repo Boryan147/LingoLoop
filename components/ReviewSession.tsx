@@ -14,17 +14,38 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
   const [activeQueue, setActiveQueue] = useState<VocabularyItem[]>([]);
   const [passiveQueue, setPassiveQueue] = useState<VocabularyItem[]>([]);
   
+  const clearReviewSessionStorage = () => {
+    sessionStorage.removeItem('lingoloop_review_story');
+    sessionStorage.removeItem('lingoloop_review_batch_index');
+    sessionStorage.removeItem('lingoloop_review_active_index');
+    sessionStorage.removeItem('lingoloop_review_phase');
+  };
+
   // Phase management: 'ACTIVE' -> 'PASSIVE' -> 'COMPLETE'
-  const [phase, setPhase] = useState<'LOADING' | 'ACTIVE' | 'PASSIVE' | 'COMPLETE'>('LOADING');
+  const [phase, setPhase] = useState<'LOADING' | 'ACTIVE' | 'PASSIVE' | 'COMPLETE'>(() => {
+    const savedPhase = sessionStorage.getItem('lingoloop_review_phase');
+    if (savedPhase === 'ACTIVE' || savedPhase === 'PASSIVE' || savedPhase === 'COMPLETE') {
+      return savedPhase;
+    }
+    return 'LOADING';
+  });
 
   // ACTIVE Phase states
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [activeIndex, setActiveIndex] = useState(() => {
+    const val = sessionStorage.getItem('lingoloop_review_active_index');
+    return val ? parseInt(val, 10) : 0;
+  });
   const [isActiveFlipped, setIsActiveFlipped] = useState(false);
 
   // PASSIVE Phase states
   const [passiveBatches, setPassiveBatches] = useState<VocabularyItem[][]>([]);
-  const [currentBatchIndex, setCurrentBatchIndex] = useState(0);
-  const [currentStory, setCurrentStory] = useState('');
+  const [currentBatchIndex, setCurrentBatchIndex] = useState(() => {
+    const val = sessionStorage.getItem('lingoloop_review_batch_index');
+    return val ? parseInt(val, 10) : 0;
+  });
+  const [currentStory, setCurrentStory] = useState(() => {
+    return sessionStorage.getItem('lingoloop_review_story') || '';
+  });
   const [isGeneratingStory, setIsGeneratingStory] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -33,6 +54,24 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
   // Batch states
   const [revealedIds, setRevealedIds] = useState<Record<string, boolean>>({});
   const [batchRatings, setBatchRatings] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (phase !== 'LOADING') {
+      sessionStorage.setItem('lingoloop_review_phase', phase);
+    }
+  }, [phase]);
+
+  useEffect(() => {
+    sessionStorage.setItem('lingoloop_review_active_index', activeIndex.toString());
+  }, [activeIndex]);
+
+  useEffect(() => {
+    sessionStorage.setItem('lingoloop_review_batch_index', currentBatchIndex.toString());
+  }, [currentBatchIndex]);
+
+  useEffect(() => {
+    sessionStorage.setItem('lingoloop_review_story', currentStory);
+  }, [currentStory]);
 
   useEffect(() => {
     const fetchDue = async () => {
@@ -52,12 +91,17 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
       }
       setPassiveBatches(batches);
 
-      if (active.length > 0) {
-        setPhase('ACTIVE');
-      } else if (batches.length > 0) {
-        setPhase('PASSIVE');
+      const savedPhase = sessionStorage.getItem('lingoloop_review_phase');
+      if (savedPhase === 'ACTIVE' || savedPhase === 'PASSIVE' || savedPhase === 'COMPLETE') {
+        setPhase(savedPhase);
       } else {
-        setPhase('COMPLETE');
+        if (active.length > 0) {
+          setPhase('ACTIVE');
+        } else if (batches.length > 0) {
+          setPhase('PASSIVE');
+        } else {
+          setPhase('COMPLETE');
+        }
       }
     };
     fetchDue();
@@ -66,6 +110,12 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
   // Handle micro-story generation and TTS loading when entering a new PASSIVE batch
   useEffect(() => {
     if (phase === 'PASSIVE' && passiveBatches.length > 0 && currentBatchIndex < passiveBatches.length) {
+      const savedStory = sessionStorage.getItem('lingoloop_review_story');
+      const savedBatchIdx = sessionStorage.getItem('lingoloop_review_batch_index');
+      if (savedStory && savedBatchIdx && parseInt(savedBatchIdx, 10) === currentBatchIndex) {
+        return;
+      }
+
       const loadBatchStory = async () => {
         setIsGeneratingStory(true);
         setCurrentStory('');
@@ -145,6 +195,7 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
       if (passiveBatches.length > 0) {
         setPhase('PASSIVE');
       } else {
+        clearReviewSessionStorage();
         setPhase('COMPLETE');
       }
     }
@@ -168,6 +219,7 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
     if (currentBatchIndex < passiveBatches.length - 1) {
       setCurrentBatchIndex(prev => prev + 1);
     } else {
+      clearReviewSessionStorage();
       setPhase('COMPLETE');
     }
   };
@@ -197,7 +249,10 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
           You completed all active and passive reviews for today.
         </p>
         <button
-          onClick={onComplete}
+          onClick={() => {
+            clearReviewSessionStorage();
+            onComplete();
+          }}
           className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200"
         >
           Back to Dashboard
