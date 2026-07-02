@@ -34,7 +34,7 @@ export const generateIntakeAI = async (
     const isPassive = type === 'PASSIVE';
     const contextPart = contextHint ? `Context/Trigger hint provided: "${contextHint}".` : '';
     const synonymPart = synonym 
-      ? `The user also provided a synonym they want to associate/compare: "${synonym}". Crucially, compare the main expression and this synonym "${synonym}" in the definition output (e.g. explain the definition of the main expression first, and then add a clear note on when to use one vs the other). Also, return "${synonym}" in the synonyms array.`
+      ? `The user also provided a synonym they want to associate/compare: "${synonym}". Crucially, compare the main expression and this synonym "${synonym}" in the definition output (e.g. explain the definition of the main expression first, and then add a clear note on when to use one vs the other). Also, return "${synonym}" in the synonyms array, and generate example sentences for each synonym.`
       : 'Do NOT suggest or generate any synonyms. Return an empty array [] in the synonyms field.';
 
     const systemPrompt = isPassive
@@ -42,7 +42,9 @@ export const generateIntakeAI = async (
          Input expression: "${input}".
          ${contextPart}
          ${synonymPart}
-         Provide a clear, simple English explanation (under 35 words) and 3 natural example sentences.`
+         Provide a clear, simple English explanation (under 35 words).
+         Generate exactly 3 natural example sentences for the main expression.
+         CRITICAL: If a synonym is provided, also generate 1 natural conversational example sentence for each synonym. Prefix it with "[Synonym: <synonym_word>] " (e.g. "[Synonym: initiate] ...") and append it to the examples array.`
       : `You are an expert English tutor. The user wants to capture an ACTIVE vocabulary item to learn to speak naturally and effortlessly.
          Input thought/expression to translate (Chinese or simple English): "${input}".
          ${contextPart}
@@ -52,7 +54,8 @@ export const generateIntakeAI = async (
          1. What is the most authentic, natural, and "brainless" (automatic) spoken expression or sentence chunk for this?
             - CRITICAL: If the input represents a common everyday life concept, scenario, or thought, generate a ready-to-use sentence chunk/template (e.g. "I think this method has some problems", "It's not that big of a deal", or "Let's call it a day") instead of just isolated words or phrases. We want functional, pre-assembled chunks the user can use instantly without constructing sentences in their head.
          2. Provide a brief, 1-sentence explanation of its conversational usage, nuance, and scenario (under 35 words).
-         3. Generate exactly 3 example sentences showing usage in DIFFERENT conversational tones (Casual/Colloquial, Polite/Professional, and Direct/Emphatic). Prefix each sentence with its tone label, e.g. "[Casual] ...", "[Polite] ...", "[Direct] ...".`;
+         3. Generate exactly 3 example sentences showing usage of the main expression in DIFFERENT conversational tones (Casual/Colloquial, Polite/Professional, and Direct/Emphatic). Prefix each sentence with its tone label, e.g. "[Casual] ...", "[Polite] ...", "[Direct] ...".
+         4. CRITICAL: If a synonym is provided, also generate 1 natural conversational example sentence for each synonym. Prefix it with "[Synonym: <synonym_word>] " (e.g. "[Synonym: initiate] ...") and append it to the examples array.`;
 
     const response = await callWithRetry(() => ai.models.generateContent({
       model: 'gemini-2.5-flash',
@@ -75,7 +78,7 @@ export const generateIntakeAI = async (
             examples: { 
               type: Type.ARRAY, 
               items: { type: Type.STRING },
-              description: "Exactly three natural spoken example sentences showing usage with different conversational tones (Casual, Polite/Professional, Direct), prefixed with their tone label, e.g., '[Casual] This is a test.'"
+              description: "Examples showing usage of the main expression (prefixed with tone labels). If a synonym was provided, also include 1 example for each synonym, prefixed with '[Synonym: <synonym_word>]'."
             },
             synonyms: {
               type: Type.ARRAY,
