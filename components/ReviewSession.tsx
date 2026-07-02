@@ -22,13 +22,7 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
   };
 
   // Phase management: 'ACTIVE' -> 'PASSIVE' -> 'COMPLETE'
-  const [phase, setPhase] = useState<'LOADING' | 'ACTIVE' | 'PASSIVE' | 'COMPLETE'>(() => {
-    const savedPhase = sessionStorage.getItem('lingoloop_review_phase');
-    if (savedPhase === 'ACTIVE' || savedPhase === 'PASSIVE' || savedPhase === 'COMPLETE') {
-      return savedPhase;
-    }
-    return 'LOADING';
-  });
+  const [phase, setPhase] = useState<'LOADING' | 'ACTIVE' | 'PASSIVE' | 'COMPLETE'>('LOADING');
 
   // ACTIVE Phase states
   const [activeIndex, setActiveIndex] = useState(() => {
@@ -92,8 +86,35 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
       setPassiveBatches(batches);
 
       const savedPhase = sessionStorage.getItem('lingoloop_review_phase');
-      if (savedPhase === 'ACTIVE' || savedPhase === 'PASSIVE' || savedPhase === 'COMPLETE') {
-        setPhase(savedPhase);
+      const savedActiveIndex = Number(sessionStorage.getItem('lingoloop_review_active_index') || '0');
+
+      let finalPhase = savedPhase;
+      let finalActiveIndex = savedActiveIndex;
+
+      if (savedPhase === 'ACTIVE') {
+        if (active.length === 0 || savedActiveIndex >= active.length) {
+          finalActiveIndex = 0;
+          setActiveIndex(0);
+          sessionStorage.setItem('lingoloop_review_active_index', '0');
+          if (batches.length > 0) {
+            finalPhase = 'PASSIVE';
+            sessionStorage.setItem('lingoloop_review_phase', 'PASSIVE');
+          } else {
+            finalPhase = 'COMPLETE';
+            sessionStorage.setItem('lingoloop_review_phase', 'COMPLETE');
+          }
+        }
+      } else if (savedPhase === 'PASSIVE') {
+        if (batches.length === 0 || currentBatchIndex >= batches.length) {
+          setCurrentBatchIndex(0);
+          sessionStorage.setItem('lingoloop_review_batch_index', '0');
+          finalPhase = 'COMPLETE';
+          sessionStorage.setItem('lingoloop_review_phase', 'COMPLETE');
+        }
+      }
+
+      if (finalPhase === 'ACTIVE' || finalPhase === 'PASSIVE' || finalPhase === 'COMPLETE') {
+        setPhase(finalPhase as any);
       } else {
         if (active.length > 0) {
           setPhase('ACTIVE');
@@ -261,6 +282,8 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
     );
   }
 
+  const currentActiveItem = activeQueue[activeIndex];
+
   return (
     <div className="w-full bg-slate-50">
       <div className="min-h-full flex flex-col items-center p-4 md:p-6 pb-24 md:pb-6">
@@ -288,7 +311,7 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
           </div>
 
           {/* ACTIVE recall flashcards */}
-          {phase === 'ACTIVE' && (
+          {phase === 'ACTIVE' && currentActiveItem && (
             <>
               <div className="flex-1 relative perspective-1000 min-h-[50vh] md:min-h-[350px] mb-6">
                 <div 
@@ -302,12 +325,12 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
                         <Zap className="w-7 h-7 text-emerald-500 fill-current" />
                       </div>
                       <span className="text-xs md:text-sm font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full uppercase tracking-wide mb-3">
-                        {activeQueue[activeIndex].context_hint 
+                        {currentActiveItem.context_hint 
                           ? "Trigger Thought (Recall the English Phrase)" 
                           : "English Expression (Recall the Meaning)"}
                       </span>
                       <h2 className="text-xl md:text-2xl font-bold text-slate-800 leading-normal max-w-md">
-                        {activeQueue[activeIndex].context_hint || activeQueue[activeIndex].word_or_phrase}
+                        {currentActiveItem.context_hint || currentActiveItem.word_or_phrase}
                       </h2>
                       <button className="mt-8 text-xs font-bold text-indigo-650">Reveal Answer</button>
                     </div>
@@ -318,25 +341,25 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
                     <div className="flex-1 flex flex-col justify-center space-y-5">
                       <div className="text-center pb-3 border-b border-white/20">
                         <span className="text-[10px] font-bold uppercase tracking-wider block opacity-70 mb-1">Authentic Phrase</span>
-                        <h2 className="text-2xl md:text-3xl font-black">{activeQueue[activeIndex].word_or_phrase}</h2>
+                        <h2 className="text-2xl md:text-3xl font-black">{currentActiveItem.word_or_phrase}</h2>
                       </div>
                       <div className="bg-white/10 p-4 rounded-xl border border-white/10">
                         <span className="text-[10px] font-bold text-yellow-300 uppercase tracking-wider block mb-1">nuance / Definition</span>
-                        <p className="text-sm font-semibold">{activeQueue[activeIndex].definition}</p>
+                        <p className="text-sm font-semibold">{currentActiveItem.definition}</p>
                       </div>
-                      {activeQueue[activeIndex].examples && activeQueue[activeIndex].examples.length > 0 && (
+                      {currentActiveItem.examples && currentActiveItem.examples.length > 0 && (
                         <div className="bg-white/5 p-4 rounded-xl border border-white/5">
                           <span className="text-[10px] font-bold uppercase tracking-wider block mb-1">Examples</span>
                           <ul className="list-disc pl-4 space-y-1 text-xs opacity-90">
-                            {activeQueue[activeIndex].examples.map((ex, i) => <li key={i}>{ex}</li>)}
+                            {currentActiveItem.examples.map((ex, i) => <li key={i}>{ex}</li>)}
                           </ul>
                         </div>
                       )}
-                      {activeQueue[activeIndex].synonyms && activeQueue[activeIndex].synonyms.length > 0 && (
+                      {currentActiveItem.synonyms && currentActiveItem.synonyms.length > 0 && (
                         <div className="bg-white/10 p-4 rounded-xl border border-white/10 animate-in fade-in">
                           <span className="text-[10px] font-bold text-yellow-300 uppercase tracking-wider block mb-1">Synonyms</span>
                           <div className="flex flex-wrap gap-1.5 mt-1.5">
-                            {activeQueue[activeIndex].synonyms.map((syn, idx) => (
+                            {currentActiveItem.synonyms.map((syn, idx) => (
                               <span key={idx} className="text-xs bg-white/20 px-2 py-0.5 rounded-md font-medium">
                                 {syn}
                               </span>
@@ -344,11 +367,11 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
                           </div>
                         </div>
                       )}
-                      {activeQueue[activeIndex].word_family && activeQueue[activeIndex].word_family.length > 0 && (
+                      {currentActiveItem.word_family && currentActiveItem.word_family.length > 0 && (
                         <div className="bg-white/15 p-4 rounded-xl border border-white/10 animate-in fade-in">
                           <span className="text-[10px] font-bold text-yellow-300 uppercase tracking-wider block mb-1">Word Family</span>
                           <div className="flex flex-wrap gap-1.5 mt-1.5">
-                            {activeQueue[activeIndex].word_family.map((member, idx) => (
+                            {currentActiveItem.word_family.map((member, idx) => (
                               <span key={idx} className="text-xs bg-white/25 px-2 py-0.5 rounded-md font-medium">
                                 {member}
                               </span>
