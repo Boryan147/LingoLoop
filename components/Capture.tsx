@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { VocabularyItem } from '../types';
-import { generateIntakeAI, evaluateSentence } from '../services/gemini';
+import { generateIntakeAI } from '../services/gemini';
 import { getInitialSRSState } from '../services/srs';
 import { Plus, Loader2, Book, Sparkles, AlertCircle, Trash2, ArrowLeftRight, Search, Zap, Eye, Calendar, CheckCircle2, ArrowUp, Edit, X } from 'lucide-react';
 import * as storage from '../services/storage';
@@ -95,9 +95,7 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Sentence evaluation states for active items in list
-  const [customSentences, setCustomSentences] = useState<Record<string, string>>({});
-  const [sentenceFeedback, setSentenceFeedback] = useState<Record<string, { evaluating: boolean, result?: { isCorrect: boolean, feedback: string }, error?: string }>>({});
+
 
   const [showScrollTop, setShowScrollTop] = useState(false);
 
@@ -147,18 +145,7 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
     }
   };
 
-  const handleEvaluateSentence = async (itemId: string, expression: string) => {
-    const sentence = customSentences[itemId];
-    if (!sentence?.trim()) return;
 
-    setSentenceFeedback(prev => ({ ...prev, [itemId]: { evaluating: true } }));
-    try {
-      const result = await evaluateSentence(expression, sentence);
-      setSentenceFeedback(prev => ({ ...prev, [itemId]: { evaluating: false, result } }));
-    } catch (err) {
-      setSentenceFeedback(prev => ({ ...prev, [itemId]: { evaluating: false, error: "Failed to evaluate sentence. Try again." } }));
-    }
-  };
 
   const handleGenerate = async () => {
     if (!wordOrPhrase.trim()) return;
@@ -649,38 +636,7 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
                 </div>
               )}
 
-              {/* Practice block specifically for ACTIVE items */}
-              {item.type === 'ACTIVE' && (
-                <div className="mt-4 pt-4 border-t border-slate-150 border-dashed">
-                  <span className="text-xs font-bold text-slate-400 uppercase mb-2 block">Practice: Make a Sentence</span>
-                  <div className="flex gap-2 items-start">
-                    <textarea
-                      value={customSentences[item.id] || ''}
-                      onChange={(e) => setCustomSentences(prev => ({...prev, [item.id]: e.target.value}))}
-                      placeholder={`Write a sentence using "${item.word_or_phrase}"...`}
-                      className="flex-1 text-sm p-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none h-14"
-                    />
-                    <button
-                      onClick={() => handleEvaluateSentence(item.id, item.word_or_phrase)}
-                      disabled={!customSentences[item.id] || sentenceFeedback[item.id]?.evaluating}
-                      className="px-4 py-2 bg-indigo-650 text-white rounded-lg font-medium text-xs hover:bg-indigo-700 disabled:opacity-50 transition-all shadow-sm"
-                    >
-                      {sentenceFeedback[item.id]?.evaluating ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Check'}
-                    </button>
-                  </div>
-                  {sentenceFeedback[item.id]?.result && (
-                    <div className={`mt-2 p-2.5 rounded-lg flex items-start gap-2 ${sentenceFeedback[item.id].result!.isCorrect ? 'bg-emerald-50 text-emerald-800 border border-emerald-100' : 'bg-rose-50 text-rose-800 border border-rose-100'}`}>
-                      {sentenceFeedback[item.id].result!.isCorrect ? <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0" /> : <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />}
-                      <p className="text-xs leading-relaxed">{sentenceFeedback[item.id].result!.feedback}</p>
-                    </div>
-                  )}
-                  {sentenceFeedback[item.id]?.error && (
-                    <div className="mt-2 p-2 text-xs text-red-600 bg-red-50 rounded border border-red-100">
-                      {sentenceFeedback[item.id].error}
-                    </div>
-                  )}
-                </div>
-              )}
+
 
               {/* SRS Metadata */}
               <div className="flex items-center gap-4 mt-3 pt-3 border-t border-slate-100 text-[10px] text-slate-400 font-mono">

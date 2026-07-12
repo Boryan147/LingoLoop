@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { VocabularyItem } from '../types';
-import { calculateNextReview } from '../services/srs';
-import { generateDailyPassiveContext, generateSpeech, playBrowserSpeech } from '../services/gemini';
+import { calculateNextReview, getInitialSRSState } from '../services/srs';
+import { generateDailyPassiveContext, generateSpeech, playBrowserSpeech, evaluateSentence, generateIntakeAI } from '../services/gemini';
 import * as storage from '../services/storage';
-import { PartyPopper, Lightbulb, Zap, Eye, Play, Volume2, Sparkles, Check, HelpCircle, Loader2, ExternalLink } from 'lucide-react';
+import { PartyPopper, Lightbulb, Zap, Eye, Play, Volume2, Sparkles, Check, HelpCircle, Loader2, ExternalLink, X, AlertCircle, CheckCircle2, Plus } from 'lucide-react';
 
 interface ReviewSessionProps {
   onComplete: () => void;
@@ -31,8 +31,130 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
     return val ? parseInt(val, 10) : 0;
   });
   const [isActiveFlipped, setIsActiveFlipped] = useState(false);
+  const [sentenceInput, setSentenceInput] = useState('');
+  const [sentenceEvaluating, setSentenceEvaluating] = useState(false);
+  const [sentenceFeedback, setSentenceFeedback] = useState<{ isCorrect: boolean, feedback: string } | null>(null);
+  const [sentenceError, setSentenceError] = useState<string | null>(null);
+
+  const handleEvaluateSentence = async (wordOrPhrase: string) => {
+    if (!sentenceInput.trim()) return;
+    setSentenceEvaluating(true);
+    setSentenceFeedback(null);
+    setSentenceError(null);
+    try {
+      const result = await evaluateSentence(wordOrPhrase, sentenceInput);
+      setSentenceFeedback(result);
+    } catch (err) {
+      setSentenceError("Failed to evaluate sentence. Try again.");
+    } finally {
+      setSentenceEvaluating(false);
+    }
+  };
 
   // PASSIVE Phase states
+  const [selectedText, setSelectedText] = useState('');
+
+  const handleTextSelection = () => {
+    if (typeof window !== 'undefined') {
+      const selection = window.getSelection();
+      const text = selection ? selection.toString().trim() : '';
+      if (text && text.length > 0 && text.length < 60) {
+        setSelectedText(text);
+      }
+    }
+  };
+
+  // Capture Word Modal states
+  const [isCaptureModalOpen, setIsCaptureModalOpen] = useState(false);
+  const [modalWord, setModalWord] = useState('');
+  const [modalType, setModalType] = useState<'ACTIVE' | 'PASSIVE'>('PASSIVE');
+  const [modalContext, setModalContext] = useState('');
+  const [modalDefinition, setModalDefinition] = useState('');
+  const [modalExamples, setModalExamples] = useState('');
+  const [modalSynonyms, setModalSynonyms] = useState('');
+  const [modalWordFamily, setModalWordFamily] = useState('');
+  const [isModalGenerating, setIsModalGenerating] = useState(false);
+  const [isModalSaving, setIsModalSaving] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
+
+  const openCaptureModal = (initialWord: string = '') => {
+    setModalWord(initialWord);
+    setModalType('PASSIVE');
+    const plainStory = currentStory.replace(/<[^>]*>/g, '');
+    setModalContext(plainStory);
+    setModalDefinition('');
+    setModalExamples('');
+    setModalSynonyms('');
+    setModalWordFamily('');
+    setModalError(null);
+    setIsCaptureModalOpen(true);
+  };
+
+  const handleModalGenerate = async () => {
+    if (!modalWord.trim()) return;
+    setIsModalGenerating(true);
+    setModalError(null);
+    try {
+      const result = await generateIntakeAI(modalWord, modalType, modalContext, modalSynonyms.trim());
+      if (modalType === 'ACTIVE') {
+        setModalWord(result.word_or_phrase);
+      }
+      setModalDefinition(result.definition);
+      setModalExamples(result.examples ? result.examples.join('\n') : '');
+      setModalSynonyms(result.synonyms ? result.synonyms.join(', ') : '');
+    } catch (err: any) {
+      setModalError(err.message || 'Failed to generate content with AI.');
+    } finally {
+      setIsModalGenerating(false);
+    }
+  };
+
+  const handleModalSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!modalWord.trim() || !modalDefinition.trim()) return;
+
+    setIsModalSaving(true);
+    setModalError(null);
+
+    try {
+      const parsedSynonyms = modalSynonyms
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean);
+
+      const parsedExamples = modalExamples
+        .split('\n')
+        .map(ex => ex.trim())
+        .filter(Boolean);
+
+      const parsedWordFamily = modalWordFamily
+        .split(',')
+        .map(wf => wf.trim())
+        .filter(Boolean);
+
+      const newItem: VocabularyItem = {
+        id: storage.generateId(),
+        user_id: userId,
+        word_or_phrase: modalWord.trim(),
+        type: modalType,
+        context_hint: modalContext.trim(),
+        definition: modalDefinition.trim(),
+        examples: parsedExamples,
+        synonyms: parsedSynonyms,
+        word_family: parsedWordFamily,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        ...getInitialSRSState(),
+      };
+      await storage.saveItem(newItem, userId);
+      setIsCaptureModalOpen(false);
+      setSelectedText('');
+    } catch (err: any) {
+      setModalError(err.message || 'Failed to save vocabulary item.');
+    } finally {
+      setIsModalSaving(false);
+    }
+  };
   const [passiveBatches, setPassiveBatches] = useState<VocabularyItem[][]>([]);
   const [currentBatchIndex, setCurrentBatchIndex] = useState(() => {
     const val = sessionStorage.getItem('lingoloop_review_batch_index');
@@ -220,6 +342,9 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
 
     if (activeIndex < activeQueue.length - 1) {
       setIsActiveFlipped(false);
+      setSentenceInput('');
+      setSentenceFeedback(null);
+      setSentenceError(null);
       setTimeout(() => setActiveIndex(prev => prev + 1), 150);
     } else {
       // Finished ACTIVE phase, proceed to PASSIVE
@@ -408,6 +533,36 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
                           </div>
                         </div>
                       )}
+                      {/* Optional Practice Box */}
+                      <div className="mt-4 pt-4 border-t border-white/20 border-dashed">
+                        <span className="text-[10px] font-bold uppercase tracking-wider block opacity-70 mb-2 font-semibold">Practice: Make a Sentence (Optional)</span>
+                        <div className="flex gap-2 items-start">
+                          <textarea
+                            value={sentenceInput}
+                            onChange={(e) => setSentenceInput(e.target.value)}
+                            placeholder={`Write a sentence using "${currentActiveItem.word_or_phrase}"...`}
+                            className="flex-1 text-xs p-2 bg-white/10 text-white placeholder-white/50 border border-white/25 rounded-xl focus:outline-none focus:ring-2 focus:ring-white/50 resize-none h-14"
+                          />
+                          <button
+                            onClick={() => handleEvaluateSentence(currentActiveItem.word_or_phrase)}
+                            disabled={!sentenceInput.trim() || sentenceEvaluating}
+                            className="px-4 py-2 bg-white text-emerald-700 rounded-xl font-bold text-xs hover:bg-emerald-50 disabled:opacity-50 transition-all shadow-md shrink-0 flex items-center justify-center h-14"
+                          >
+                            {sentenceEvaluating ? <Loader2 className="w-4 h-4 animate-spin text-emerald-700" /> : 'Check'}
+                          </button>
+                        </div>
+                        {sentenceFeedback && (
+                          <div className={`mt-2.5 p-3 rounded-xl flex items-start gap-2 text-xs leading-relaxed ${sentenceFeedback.isCorrect ? 'bg-emerald-500/30 border border-emerald-400/40 text-emerald-50' : 'bg-rose-500/30 border border-rose-400/40 text-rose-50'}`}>
+                            {sentenceFeedback.isCorrect ? <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0" /> : <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />}
+                            <p>{sentenceFeedback.feedback}</p>
+                          </div>
+                        )}
+                        {sentenceError && (
+                          <div className="mt-2.5 p-2.5 text-xs text-rose-200 bg-rose-500/20 rounded-xl border border-rose-500/30">
+                            {sentenceError}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -442,7 +597,11 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
           {phase === 'PASSIVE' && (
             <div className="space-y-6">
               {/* Story Card */}
-              <div className="bg-white p-6 rounded-3xl shadow-xl border border-slate-200/80 relative overflow-hidden">
+              <div 
+                className="bg-white p-6 rounded-3xl shadow-xl border border-slate-200/80 relative overflow-hidden"
+                onMouseUp={handleTextSelection}
+                onTouchEnd={handleTextSelection}
+              >
                 <div className="absolute top-0 right-0 p-4 flex items-center gap-1.5 text-xs text-indigo-500 font-semibold bg-indigo-50/60 rounded-bl-2xl">
                   <Sparkles className="w-3.5 h-3.5" /> AI Story Context
                 </div>
@@ -461,22 +620,47 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
                       dangerouslySetInnerHTML={{ __html: currentStory || "No story context generated." }}
                     />
                     
-                    {/* Audio Player Controls */}
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={handlePlayAudio}
-                        className={`p-3 rounded-full flex items-center justify-center transition-all ${isPlaying ? 'bg-indigo-100 text-indigo-600 hover:bg-indigo-200' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md'}`}
-                        title="Listen to story"
-                      >
-                        {isPlaying ? <Loader2 className="w-5 h-5 animate-spin" /> : <Volume2 className="w-5 h-5" />}
-                      </button>
-                      <div>
-                        <span className="block text-xs font-bold text-slate-700">Listen to Paragraph</span>
-                        <span className="text-[10px] text-slate-400 font-mono">
-                          {audioUrl ? "Authentic Voice Modality" : "Web Speech Synthesis"}
-                        </span>
+                    {/* Audio Player Controls & Capture word button */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={handlePlayAudio}
+                          className={`p-3 rounded-full flex items-center justify-center transition-all ${isPlaying ? 'bg-indigo-100 text-indigo-600 hover:bg-indigo-200' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md'}`}
+                          title="Listen to story"
+                        >
+                          {isPlaying ? <Loader2 className="w-5 h-5 animate-spin" /> : <Volume2 className="w-5 h-5" />}
+                        </button>
+                        <div>
+                          <span className="block text-xs font-bold text-slate-700">Listen to Paragraph</span>
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            {audioUrl ? "Authentic Voice Modality" : "Web Speech Synthesis"}
+                          </span>
+                        </div>
                       </div>
+
+                      <button
+                        onClick={() => openCaptureModal(selectedText)}
+                        className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 active:bg-indigo-150 text-indigo-700 rounded-xl text-xs font-bold transition-all border border-indigo-100/50 flex items-center justify-center gap-1.5 cursor-pointer shadow-sm hover:scale-[1.02] shrink-0"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>{selectedText ? `Capture "${selectedText}"` : 'Capture Word from Story'}</span>
+                      </button>
                     </div>
+
+                    {selectedText && (
+                      <div className="mt-3 pt-3 border-t border-slate-100 flex justify-between items-center text-xs animate-in fade-in duration-200">
+                        <span className="text-slate-500 font-medium">Selected text: <strong className="text-slate-800 font-semibold">"{selectedText}"</strong></span>
+                        <button
+                          onClick={() => {
+                            if (typeof window !== 'undefined') window.getSelection()?.removeAllRanges();
+                            setSelectedText('');
+                          }}
+                          className="text-slate-400 hover:text-slate-600 font-bold"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    )}
                   </>
                 )}
               </div>
@@ -598,6 +782,166 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
 
         </div>
       </div>
+
+      {/* Capture Word Modal */}
+      {isCaptureModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-4 animate-in zoom-in-95 duration-200 custom-scrollbar text-slate-800">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-1.5">
+                <Plus className="w-5 h-5 text-indigo-600" /> Capture Word from Story
+              </h3>
+              <button 
+                onClick={() => setIsCaptureModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-full transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleModalSave} className="space-y-4 text-left">
+              {/* Word & Type Selector */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="sm:col-span-2">
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">
+                    {modalType === 'ACTIVE' ? 'Your Thoughts (Chinese/Simple English)' : 'English Expression / Word'}
+                  </label>
+                  <input
+                    type="text"
+                    value={modalWord}
+                    onChange={(e) => setModalWord(e.target.value)}
+                    placeholder={modalType === 'ACTIVE' ? "e.g. 表达不想内卷了，顺其自然" : "e.g. obfuscate"}
+                    className="w-full text-sm p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-slate-900 font-medium"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Type</label>
+                  <div className="flex bg-slate-100 p-0.5 rounded-lg">
+                    <button
+                      type="button"
+                      onClick={() => setModalType('ACTIVE')}
+                      className={`flex-1 py-1 rounded-md text-[10px] font-bold transition-all ${modalType === 'ACTIVE' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-450 hover:text-slate-600'}`}
+                    >
+                      Active
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setModalType('PASSIVE')}
+                      className={`flex-1 py-1 rounded-md text-[10px] font-bold transition-all ${modalType === 'PASSIVE' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-450 hover:text-slate-600'}`}
+                    >
+                      Passive
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Context Hint */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">
+                  Context Hint (Pre-filled from current story)
+                </label>
+                <textarea
+                  value={modalContext}
+                  onChange={(e) => setModalContext(e.target.value)}
+                  rows={2}
+                  className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all resize-none text-slate-900 font-medium"
+                />
+              </div>
+
+              {/* Definition */}
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Definition / Nuance</label>
+                  <button
+                    type="button"
+                    onClick={handleModalGenerate}
+                    disabled={isModalGenerating || !modalWord.trim()}
+                    className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 disabled:opacity-50 transition-all"
+                  >
+                    {isModalGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3 text-indigo-500" />}
+                    AI Generate Assist
+                  </button>
+                </div>
+                <textarea
+                  value={modalDefinition}
+                  onChange={(e) => setModalDefinition(e.target.value)}
+                  placeholder="Enter explanation manually or click AI Generate Assist"
+                  rows={2}
+                  className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all resize-none text-slate-900 font-medium"
+                  required
+                />
+              </div>
+
+              {/* Examples */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">
+                  Example Sentences (Optional, one per line)
+                </label>
+                <textarea
+                  value={modalExamples}
+                  onChange={(e) => setModalExamples(e.target.value)}
+                  placeholder="e.g. This is a natural example sentence."
+                  rows={2}
+                  className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-slate-900 font-medium"
+                />
+              </div>
+
+              {/* Synonyms & Word Family */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">
+                    Synonyms (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={modalSynonyms}
+                    onChange={(e) => setModalSynonyms(e.target.value)}
+                    placeholder="e.g. elude, escape"
+                    className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-slate-900 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">
+                    Word Family (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={modalWordFamily}
+                    onChange={(e) => setModalWordFamily(e.target.value)}
+                    placeholder="e.g. act, active"
+                    className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-slate-900 font-medium"
+                  />
+                </div>
+              </div>
+
+              {modalError && (
+                <p className="text-red-500 text-xs flex items-center gap-1 mt-2">
+                  <AlertCircle className="w-3.5 h-3.5" /> {modalError}
+                </p>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="submit"
+                  disabled={isModalSaving || isModalGenerating || !modalWord.trim() || !modalDefinition.trim()}
+                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl disabled:opacity-50 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md text-xs"
+                >
+                  {isModalSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  Save to Vocabulary
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsCaptureModalOpen(false)}
+                  className="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-all text-xs"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
