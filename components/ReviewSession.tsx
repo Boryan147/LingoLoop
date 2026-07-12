@@ -238,6 +238,14 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
     }
 
     if (currentBatchIndex < passiveBatches.length - 1) {
+      sessionStorage.removeItem('lingoloop_review_story');
+      setCurrentStory('');
+      setAudioUrl(null);
+      setIsPlaying(false);
+      if (audioElement) {
+        audioElement.pause();
+        setAudioElement(null);
+      }
       setCurrentBatchIndex(prev => prev + 1);
     } else {
       clearReviewSessionStorage();
