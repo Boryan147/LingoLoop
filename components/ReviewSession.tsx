@@ -16,6 +16,7 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
   
   const clearReviewSessionStorage = () => {
     sessionStorage.removeItem('lingoloop_review_story');
+    sessionStorage.removeItem('lingoloop_review_story_item_ids');
     sessionStorage.removeItem('lingoloop_review_batch_index');
     sessionStorage.removeItem('lingoloop_review_active_index');
     sessionStorage.removeItem('lingoloop_review_phase');
@@ -65,7 +66,14 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
 
   useEffect(() => {
     sessionStorage.setItem('lingoloop_review_story', currentStory);
-  }, [currentStory]);
+    if (!currentStory) {
+      sessionStorage.removeItem('lingoloop_review_story_item_ids');
+    } else if (phase === 'PASSIVE' && passiveBatches.length > 0 && currentBatchIndex < passiveBatches.length) {
+      const batch = passiveBatches[currentBatchIndex];
+      const currentItemIds = batch.map(item => item.id).join(',');
+      sessionStorage.setItem('lingoloop_review_story_item_ids', currentItemIds);
+    }
+  }, [currentStory, currentBatchIndex, passiveBatches, phase]);
 
   useEffect(() => {
     const fetchDue = async () => {
@@ -131,9 +139,11 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
   // Handle micro-story generation and TTS loading when entering a new PASSIVE batch
   useEffect(() => {
     if (phase === 'PASSIVE' && passiveBatches.length > 0 && currentBatchIndex < passiveBatches.length) {
+      const batch = passiveBatches[currentBatchIndex];
+      const currentItemIds = batch.map(item => item.id).join(',');
       const savedStory = sessionStorage.getItem('lingoloop_review_story');
-      const savedBatchIdx = sessionStorage.getItem('lingoloop_review_batch_index');
-      if (savedStory && savedBatchIdx && parseInt(savedBatchIdx, 10) === currentBatchIndex) {
+      const savedItemIds = sessionStorage.getItem('lingoloop_review_story_item_ids');
+      if (savedStory && savedItemIds === currentItemIds) {
         return;
       }
 
