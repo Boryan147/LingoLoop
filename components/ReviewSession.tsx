@@ -3,7 +3,7 @@ import { VocabularyItem } from '../types';
 import { calculateNextReview } from '../services/srs';
 import { generateDailyPassiveContext, generateSpeech, playBrowserSpeech } from '../services/gemini';
 import * as storage from '../services/storage';
-import { PartyPopper, Lightbulb, Zap, Eye, Play, Volume2, Sparkles, Check, HelpCircle, Loader2 } from 'lucide-react';
+import { PartyPopper, Lightbulb, Zap, Eye, Play, Volume2, Sparkles, Check, HelpCircle, Loader2, ExternalLink } from 'lucide-react';
 
 interface ReviewSessionProps {
   onComplete: () => void;
@@ -342,6 +342,17 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
                       <div className="text-center pb-3 border-b border-white/20">
                         <span className="text-[10px] font-bold uppercase tracking-wider block opacity-70 mb-1">Authentic Phrase</span>
                         <h2 className="text-2xl md:text-3xl font-black">{currentActiveItem.word_or_phrase}</h2>
+                        <div className="mt-2.5 flex justify-center">
+                          <a
+                            href={`https://youglish.com/pronounce/${encodeURIComponent(currentActiveItem.word_or_phrase)}/english`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/15 hover:bg-white/25 active:bg-white/35 text-white rounded-lg text-[11px] font-semibold transition-all border border-white/10 cursor-pointer shadow-sm hover:scale-[1.02]"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            <span>Shadow on YouGlish</span>
+                          </a>
+                        </div>
                       </div>
                       <div className="bg-white/10 p-4 rounded-xl border border-white/10">
                         <span className="text-[10px] font-bold text-yellow-300 uppercase tracking-wider block mb-1">nuance / Definition</span>
@@ -478,6 +489,17 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
                           <p className="text-sm text-slate-700 italic border-l-2 border-indigo-500 pl-3 font-semibold">
                             {item.definition}
                           </p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <a
+                              href={`https://youglish.com/pronounce/${encodeURIComponent(item.word_or_phrase)}/english`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 hover:bg-indigo-100 active:bg-indigo-150 text-indigo-700 rounded-lg text-xs font-semibold transition-all border border-indigo-100/60 cursor-pointer hover:scale-[1.02] shadow-sm"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              <span>Shadow on YouGlish</span>
+                            </a>
+                          </div>
                           {item.context_hint && (
                             <div className="bg-slate-50 p-2.5 rounded-lg text-xs text-slate-500">
                               <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide mb-0.5">Original context</span>
