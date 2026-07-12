@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { VocabularyItem } from '../types';
 import { calculateNextReview, getInitialSRSState } from '../services/srs';
-import { generateDailyPassiveContext, generateSpeech, playBrowserSpeech, evaluateSentence, generateIntakeAI } from '../services/gemini';
+import { generateDailyPassiveContext, evaluateSentence, generateIntakeAI } from '../services/gemini';
 import * as storage from '../services/storage';
-import { PartyPopper, Lightbulb, Zap, Eye, Play, Volume2, Sparkles, Check, HelpCircle, Loader2, ExternalLink, X, AlertCircle, CheckCircle2, Plus } from 'lucide-react';
+import { PartyPopper, Lightbulb, Zap, Eye, Sparkles, Check, HelpCircle, Loader2, ExternalLink, X, AlertCircle, CheckCircle2, Plus } from 'lucide-react';
 
 interface ReviewSessionProps {
   onComplete: () => void;
@@ -164,10 +164,7 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
     return sessionStorage.getItem('lingoloop_review_story') || '';
   });
   const [isGeneratingStory, setIsGeneratingStory] = useState(false);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
-  
+
   // Batch states
   const [revealedIds, setRevealedIds] = useState<Record<string, boolean>>({});
   const [batchRatings, setBatchRatings] = useState<Record<string, number>>({});
@@ -227,8 +224,8 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
           setActiveIndex(0);
           sessionStorage.setItem('lingoloop_review_active_index', '0');
           if (batches.length > 0) {
-            finalPhase = 'PASSIVE';
-            sessionStorage.setItem('lingoloop_review_phase', 'PASSIVE');
+            finalPhase = 'SELECT';
+            sessionStorage.setItem('lingoloop_review_phase', 'SELECT');
           } else {
             finalPhase = 'COMPLETE';
             sessionStorage.setItem('lingoloop_review_phase', 'COMPLETE');
@@ -238,18 +235,21 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
         if (batches.length === 0 || currentBatchIndex >= batches.length) {
           setCurrentBatchIndex(0);
           sessionStorage.setItem('lingoloop_review_batch_index', '0');
-          finalPhase = 'COMPLETE';
-          sessionStorage.setItem('lingoloop_review_phase', 'COMPLETE');
+          if (active.length > 0) {
+            finalPhase = 'SELECT';
+            sessionStorage.setItem('lingoloop_review_phase', 'SELECT');
+          } else {
+            finalPhase = 'COMPLETE';
+            sessionStorage.setItem('lingoloop_review_phase', 'COMPLETE');
+          }
         }
       }
 
-      if (finalPhase === 'ACTIVE' || finalPhase === 'PASSIVE' || finalPhase === 'COMPLETE') {
+      if (finalPhase === 'ACTIVE' || finalPhase === 'PASSIVE' || finalPhase === 'SELECT' || finalPhase === 'COMPLETE') {
         setPhase(finalPhase as any);
       } else {
-        if (active.length > 0) {
-          setPhase('ACTIVE');
-        } else if (batches.length > 0) {
-          setPhase('PASSIVE');
+        if (active.length > 0 || batches.length > 0) {
+          setPhase('SELECT');
         } else {
           setPhase('COMPLETE');
         }
@@ -272,8 +272,6 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
       const loadBatchStory = async () => {
         setIsGeneratingStory(true);
         setCurrentStory('');
-        setAudioUrl(null);
-        setIsPlaying(false);
         setRevealedIds({});
         setBatchRatings({});
         
@@ -281,14 +279,6 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
           const batch = passiveBatches[currentBatchIndex];
           const story = await generateDailyPassiveContext(batch);
           setCurrentStory(story);
-
-          // Attempt Gemini TTS
-          const audioBase64 = await generateSpeech(story);
-          if (audioBase64) {
-            const blob = base64ToBlob(audioBase64, 'audio/mp3');
-            const url = URL.createObjectURL(blob);
-            setAudioUrl(url);
-          }
         } catch (err) {
           console.error("Story context loading error", err);
         } finally {
@@ -298,41 +288,6 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
       loadBatchStory();
     }
   }, [phase, currentBatchIndex, passiveBatches]);
-
-  const base64ToBlob = (base64: string, contentType: string) => {
-    const byteCharacters = atob(base64);
-    const byteArrays = [];
-    for (let offset = 0; offset < byteCharacters.length; offset += 512) {
-      const slice = byteCharacters.slice(offset, offset + 512);
-      const byteNumbers = new Array(slice.length);
-      for (let i = 0; i < slice.length; i++) {
-        byteNumbers[i] = slice.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      byteArrays.push(byteArray);
-    }
-    return new Blob(byteArrays, { type: contentType });
-  };
-
-  const handlePlayAudio = () => {
-    if (audioUrl) {
-      if (isPlaying && audioElement) {
-        audioElement.pause();
-        setIsPlaying(false);
-      } else {
-        const audio = audioElement || new Audio(audioUrl);
-        audio.onended = () => setIsPlaying(false);
-        audio.play();
-        setAudioElement(audio);
-        setIsPlaying(true);
-      }
-    } else {
-      // Fallback: Web Speech API
-      playBrowserSpeech(currentStory);
-      setIsPlaying(true);
-      setTimeout(() => setIsPlaying(false), 5000); // Temporary indicator state
-    }
-  };
 
   const handleActiveRating = async (rating: number) => {
     const currentItem = activeQueue[activeIndex];
@@ -347,9 +302,12 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
       setSentenceError(null);
       setTimeout(() => setActiveIndex(prev => prev + 1), 150);
     } else {
-      // Finished ACTIVE phase, proceed to PASSIVE
+      // Finished ACTIVE phase
+      sessionStorage.removeItem('lingoloop_review_active_index');
+      setActiveQueue([]);
       if (passiveBatches.length > 0) {
-        setPhase('PASSIVE');
+        setPhase('SELECT');
+        sessionStorage.setItem('lingoloop_review_phase', 'SELECT');
       } else {
         clearReviewSessionStorage();
         setPhase('COMPLETE');
@@ -375,16 +333,19 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
     if (currentBatchIndex < passiveBatches.length - 1) {
       sessionStorage.removeItem('lingoloop_review_story');
       setCurrentStory('');
-      setAudioUrl(null);
-      setIsPlaying(false);
-      if (audioElement) {
-        audioElement.pause();
-        setAudioElement(null);
-      }
       setCurrentBatchIndex(prev => prev + 1);
     } else {
-      clearReviewSessionStorage();
-      setPhase('COMPLETE');
+      sessionStorage.removeItem('lingoloop_review_story');
+      sessionStorage.removeItem('lingoloop_review_story_item_ids');
+      sessionStorage.removeItem('lingoloop_review_batch_index');
+      setPassiveBatches([]);
+      if (activeQueue.length > 0) {
+        setPhase('SELECT');
+        sessionStorage.setItem('lingoloop_review_phase', 'SELECT');
+      } else {
+        clearReviewSessionStorage();
+        setPhase('COMPLETE');
+      }
     }
   };
 
@@ -398,6 +359,75 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-slate-50">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
+
+  if (phase === 'SELECT') {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[85vh] text-center p-4 md:p-8 animate-in fade-in duration-300">
+        <h2 className="text-3xl font-extrabold text-slate-900 mb-2 tracking-tight">Daily Review</h2>
+        <p className="text-slate-500 mb-8 max-w-md">
+          Choose which vocabulary type you want to practice first. Let's keep that forgetting curve flat!
+        </p>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-2xl mb-8">
+          {/* Active Recall Card */}
+          <button
+            onClick={() => {
+              if (activeQueue.length > 0) {
+                setPhase('ACTIVE');
+                sessionStorage.setItem('lingoloop_review_phase', 'ACTIVE');
+              }
+            }}
+            disabled={activeQueue.length === 0}
+            className={`flex flex-col items-center text-center p-6 md:p-8 rounded-3xl border bg-white transition-all shadow-sm group select-none relative overflow-hidden ${activeQueue.length > 0 ? 'hover:shadow-xl hover:border-emerald-500 hover:scale-[1.02] cursor-pointer border-slate-200/80' : 'opacity-60 border-slate-200/50 cursor-not-allowed'}`}
+          >
+            <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-5 ${activeQueue.length > 0 ? 'bg-emerald-50 text-emerald-600 group-hover:scale-110 transition-transform' : 'bg-slate-100 text-slate-400'}`}>
+              <Zap className={`w-6 h-6 ${activeQueue.length > 0 ? 'fill-current' : ''}`} />
+            </div>
+            <h3 className={`text-lg font-bold mb-2 ${activeQueue.length > 0 ? 'text-slate-800' : 'text-slate-400'}`}>Active Recall</h3>
+            <p className="text-xs text-slate-400 leading-relaxed mb-4 max-w-[200px]">
+              Recall the authentic English expression matching your trigger thought.
+            </p>
+            <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide ${activeQueue.length > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+              {activeQueue.length > 0 ? `${activeQueue.length} items due` : 'All Caught Up!'}
+            </span>
+          </button>
+
+          {/* Passive Story Card */}
+          <button
+            onClick={() => {
+              if (passiveBatches.length > 0) {
+                setPhase('PASSIVE');
+                sessionStorage.setItem('lingoloop_review_phase', 'PASSIVE');
+              }
+            }}
+            disabled={passiveBatches.length === 0}
+            className={`flex flex-col items-center text-center p-6 md:p-8 rounded-3xl border bg-white transition-all shadow-sm group select-none relative overflow-hidden ${passiveBatches.length > 0 ? 'hover:shadow-xl hover:border-blue-500 hover:scale-[1.02] cursor-pointer border-slate-200/80' : 'opacity-60 border-slate-200/50 cursor-not-allowed'}`}
+          >
+            <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-5 ${passiveBatches.length > 0 ? 'bg-blue-50 text-blue-600 group-hover:scale-110 transition-transform' : 'bg-slate-100 text-slate-400'}`}>
+              <Eye className="w-6 h-6" />
+            </div>
+            <h3 className={`text-lg font-bold mb-2 ${passiveBatches.length > 0 ? 'text-slate-800' : 'text-slate-400'}`}>Passive Review</h3>
+            <p className="text-xs text-slate-400 leading-relaxed mb-4 max-w-[200px]">
+              Read custom AI stories using your target vocabulary.
+            </p>
+            <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide ${passiveBatches.length > 0 ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
+              {passiveBatches.length > 0 ? `${passiveBatches.length} batches due` : 'All Caught Up!'}
+            </span>
+          </button>
+        </div>
+
+        <button
+          onClick={() => {
+            clearReviewSessionStorage();
+            onComplete();
+          }}
+          className="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-all text-xs shadow-sm hover:shadow"
+        >
+          Back to Dashboard
+        </button>
       </div>
     );
   }
@@ -620,24 +650,8 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
                       dangerouslySetInnerHTML={{ __html: currentStory || "No story context generated." }}
                     />
                     
-                    {/* Audio Player Controls & Capture word button */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={handlePlayAudio}
-                          className={`p-3 rounded-full flex items-center justify-center transition-all ${isPlaying ? 'bg-indigo-100 text-indigo-600 hover:bg-indigo-200' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md'}`}
-                          title="Listen to story"
-                        >
-                          {isPlaying ? <Loader2 className="w-5 h-5 animate-spin" /> : <Volume2 className="w-5 h-5" />}
-                        </button>
-                        <div>
-                          <span className="block text-xs font-bold text-slate-700">Listen to Paragraph</span>
-                          <span className="text-[10px] text-slate-400 font-mono">
-                            {audioUrl ? "Authentic Voice Modality" : "Web Speech Synthesis"}
-                          </span>
-                        </div>
-                      </div>
-
+                    {/* Capture word button */}
+                    <div className="flex justify-end">
                       <button
                         onClick={() => openCaptureModal(selectedText)}
                         className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 active:bg-indigo-150 text-indigo-700 rounded-xl text-xs font-bold transition-all border border-indigo-100/50 flex items-center justify-center gap-1.5 cursor-pointer shadow-sm hover:scale-[1.02] shrink-0"
