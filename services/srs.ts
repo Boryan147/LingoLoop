@@ -1,38 +1,59 @@
 import { VocabularyItem } from '../types';
 
-// Implementation of Spaced Repetition based on Ebbinghaus Forgetting Curve intervals
-// The specific intervals (1d, 2d, 3d, 5d, 8d, 14d, 30d, 60d, 90d, 120d, 150d, 180d)
-// aim to interrupt the forgetting process at critical drop-off points and ensure long-term retention.
-const EBBINGHAUS_INTERVALS = [1, 2, 3, 5, 8, 14, 30, 60, 90, 120, 150, 180];
-
+// Spaced Repetition Algorithm (Modified SM-2)
+// Adjusts review frequency dynamically based on user familiarity (quality rating).
 export const calculateNextReview = (
   item: VocabularyItem,
   quality: number // 1: Forgot, 2: Hard, 3: Good, 4: Easy
 ): Partial<VocabularyItem> => {
   let { repetitions, interval, easeFactor } = item;
 
-  // Map user quality ratings (1-4) to SM-2 qualities (0-5)
-  // 1 (Forgot) -> SM-2 quality 1 (Fail)
-  // 2 (Hard) -> SM-2 quality 3 (Serious difficulty)
-  // 3 (Good) -> SM-2 quality 4 (Hesitation)
-  // 4 (Easy) -> SM-2 quality 5 (Perfect response)
-  let smQuality = 0;
-  if (quality === 1) smQuality = 1;
-  else if (quality === 2) smQuality = 3;
-  else if (quality === 3) smQuality = 4;
-  else if (quality === 4) smQuality = 5;
+  // Adjust easeFactor based on the quality response
+  // 1 (Forgot): decrease ease factor significantly (-0.3)
+  // 2 (Hard): decrease ease factor slightly (-0.15)
+  // 3 (Good): maintain or slightly increase ease factor (+0.05)
+  // 4 (Easy): increase ease factor (+0.15)
+  let easeDelta = 0;
+  if (quality === 1) easeDelta = -0.3;
+  else if (quality === 2) easeDelta = -0.15;
+  else if (quality === 3) easeDelta = 0.05;
+  else if (quality === 4) easeDelta = 0.15;
+
+  easeFactor = Math.max(1.3, Math.min(3.0, easeFactor + easeDelta));
 
   let nextStatus = item.status;
 
-  if (smQuality >= 3) {
-    // If successful review
-    if (repetitions < EBBINGHAUS_INTERVALS.length) {
-      // Use predefined Ebbinghaus intervals
-      interval = EBBINGHAUS_INTERVALS[repetitions];
+  if (quality === 1) {
+    // Forgot: reset repetitions, set short interval (0.2 days = 4.8 hours) for quick re-review today
+    repetitions = 0;
+    interval = 0.2;
+    nextStatus = 'LEARNING';
+  } else {
+    // Successful reviews (Hard, Good, Easy)
+    if (repetitions === 0) {
+      // First review
+      if (quality === 2) interval = 1;      // Hard -> 1 day
+      else if (quality === 3) interval = 2; // Good -> 2 days
+      else interval = 4;                     // Easy -> 4 days
+    } else if (repetitions === 1) {
+      // Second review
+      if (quality === 2) interval = 2;      // Hard -> 2 days
+      else if (quality === 3) interval = 4; // Good -> 4 days
+      else interval = 7;                     // Easy -> 7 days
     } else {
-      // Switch to standard SM-2 multiplier for long-term maintenance
-      interval = Math.round(interval * easeFactor);
+      // Subsequent reviews
+      if (quality === 2) {
+        // Hard: grows slowly (1.2x multiplier)
+        interval = Math.max(1, Math.round(interval * 1.2));
+      } else if (quality === 3) {
+        // Good: grows at the standard easeFactor rate
+        interval = Math.max(2, Math.round(interval * easeFactor));
+      } else {
+        // Easy: grows faster (1.5x of easeFactor rate) to reduce frequency
+        interval = Math.max(3, Math.round(interval * easeFactor * 1.5));
+      }
     }
+
     repetitions += 1;
 
     // Transition status based on successful repetitions
@@ -43,17 +64,10 @@ export const calculateNextReview = (
     } else if (repetitions >= 4) {
       nextStatus = 'MASTERED';
     }
-  } else {
-    // If failed review, reset to learning and reset interval/repetitions
-    repetitions = 0;
-    interval = 1;
-    nextStatus = 'LEARNING';
   }
 
-  // Adjust ease factor (standard SM-2 formula)
-  // EF' = EF + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02))
-  easeFactor = easeFactor + (0.1 - (5 - smQuality) * (0.08 + (5 - smQuality) * 0.02));
-  if (easeFactor < 1.3) easeFactor = 1.3;
+  // Round interval to 2 decimal places to ensure clean values (e.g. 0.2)
+  interval = Math.round(interval * 100) / 100;
 
   const nextReviewDate = Date.now() + interval * 24 * 60 * 60 * 1000;
 
