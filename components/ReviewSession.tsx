@@ -214,33 +214,52 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
 
       const savedPhase = sessionStorage.getItem('lingoloop_review_phase');
       const savedActiveIndex = Number(sessionStorage.getItem('lingoloop_review_active_index') || '0');
+      const savedBatchIndex = Number(sessionStorage.getItem('lingoloop_review_batch_index') || '0');
 
       let finalPhase = savedPhase;
       let finalActiveIndex = savedActiveIndex;
 
-      if (savedPhase === 'ACTIVE') {
-        if (active.length === 0 || savedActiveIndex >= active.length) {
-          finalActiveIndex = 0;
-          setActiveIndex(0);
-          sessionStorage.setItem('lingoloop_review_active_index', '0');
-          if (batches.length > 0) {
-            finalPhase = 'SELECT';
-            sessionStorage.setItem('lingoloop_review_phase', 'SELECT');
-          } else {
-            finalPhase = 'COMPLETE';
-            sessionStorage.setItem('lingoloop_review_phase', 'COMPLETE');
-          }
+      // If we are starting fresh (no index progress has been recorded yet),
+      // we decide the phase dynamically. If both active and passive are due, we force SELECT mode
+      // so the user can choose. If only one is due, we auto-route them.
+      const isFreshSession = savedActiveIndex === 0 && savedBatchIndex === 0;
+      if (isFreshSession) {
+        if (active.length > 0 && batches.length > 0) {
+          finalPhase = 'SELECT';
+        } else if (active.length > 0) {
+          finalPhase = 'ACTIVE';
+        } else if (batches.length > 0) {
+          finalPhase = 'PASSIVE';
+        } else {
+          finalPhase = 'COMPLETE';
         }
-      } else if (savedPhase === 'PASSIVE') {
-        if (batches.length === 0 || currentBatchIndex >= batches.length) {
-          setCurrentBatchIndex(0);
-          sessionStorage.setItem('lingoloop_review_batch_index', '0');
-          if (active.length > 0) {
-            finalPhase = 'SELECT';
-            sessionStorage.setItem('lingoloop_review_phase', 'SELECT');
-          } else {
-            finalPhase = 'COMPLETE';
-            sessionStorage.setItem('lingoloop_review_phase', 'COMPLETE');
+        sessionStorage.setItem('lingoloop_review_phase', finalPhase);
+      } else {
+        // Bounds checking for resume cases
+        if (savedPhase === 'ACTIVE') {
+          if (active.length === 0 || savedActiveIndex >= active.length) {
+            finalActiveIndex = 0;
+            setActiveIndex(0);
+            sessionStorage.setItem('lingoloop_review_active_index', '0');
+            if (batches.length > 0) {
+              finalPhase = 'SELECT';
+              sessionStorage.setItem('lingoloop_review_phase', 'SELECT');
+            } else {
+              finalPhase = 'COMPLETE';
+              sessionStorage.setItem('lingoloop_review_phase', 'COMPLETE');
+            }
+          }
+        } else if (savedPhase === 'PASSIVE') {
+          if (batches.length === 0 || savedBatchIndex >= batches.length) {
+            setCurrentBatchIndex(0);
+            sessionStorage.setItem('lingoloop_review_batch_index', '0');
+            if (active.length > 0) {
+              finalPhase = 'SELECT';
+              sessionStorage.setItem('lingoloop_review_phase', 'SELECT');
+            } else {
+              finalPhase = 'COMPLETE';
+              sessionStorage.setItem('lingoloop_review_phase', 'COMPLETE');
+            }
           }
         }
       }
@@ -464,17 +483,30 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
           
           {/* Header */}
           <div className="flex justify-between items-center text-xs font-bold text-slate-400 mb-4 uppercase tracking-wider shrink-0">
-            <span>
-              {phase === 'ACTIVE' ? (
-                <span className="flex items-center gap-1">
-                  Active Recall Flashcards <Zap className="w-3 h-3 text-emerald-500 fill-current" />
-                </span>
-              ) : (
-                <span className="flex items-center gap-1">
-                  Passive Story Review <Eye className="w-3 h-3 text-blue-500" />
-                </span>
+            <div className="flex items-center gap-2.5">
+              <span>
+                {phase === 'ACTIVE' ? (
+                  <span className="flex items-center gap-1">
+                    Active Recall Flashcards <Zap className="w-3 h-3 text-emerald-500 fill-current" />
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1">
+                    Passive Story Review <Eye className="w-3 h-3 text-blue-500" />
+                  </span>
+                )}
+              </span>
+              {(activeQueue.length > 0 && passiveBatches.length > 0) && (
+                <button
+                  onClick={() => {
+                    setPhase('SELECT');
+                    sessionStorage.setItem('lingoloop_review_phase', 'SELECT');
+                  }}
+                  className="px-2.5 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700 rounded-lg text-[10px] font-bold normal-case transition-all border border-slate-200 shrink-0 cursor-pointer"
+                >
+                  Switch Mode
+                </button>
               )}
-            </span>
+            </div>
             <span>
               {phase === 'ACTIVE' 
                 ? `${activeIndex + 1} / ${activeQueue.length}`
