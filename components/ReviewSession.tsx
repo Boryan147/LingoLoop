@@ -10,6 +10,28 @@ interface ReviewSessionProps {
   userId: string;
 }
 
+const calculatePassiveBatches = (items: VocabularyItem[]): VocabularyItem[][] => {
+  const total = items.length;
+  if (total === 0) return [];
+  
+  // Dynamic batch sizing based on total passive queue size
+  let maxPerBatch = 5;
+  if (total > 30) maxPerBatch = 15;
+  else if (total > 20) maxPerBatch = 12;
+  else if (total > 10) maxPerBatch = 8;
+  else if (total > 5) maxPerBatch = 6;
+  else maxPerBatch = Math.max(1, total);
+
+  const numBatches = Math.ceil(total / maxPerBatch);
+  const itemsPerBatch = Math.ceil(total / numBatches);
+
+  const batches: VocabularyItem[][] = [];
+  for (let i = 0; i < total; i += itemsPerBatch) {
+    batches.push(items.slice(i, i + itemsPerBatch));
+  }
+  return batches;
+};
+
 const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => {
   const [activeQueue, setActiveQueue] = useState<VocabularyItem[]>([]);
   const [passiveQueue, setPassiveQueue] = useState<VocabularyItem[]>([]);
@@ -205,11 +227,8 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
       setActiveQueue(active);
       setPassiveQueue(passive);
 
-      // Create passive batches of 3-5 items
-      const batches: VocabularyItem[][] = [];
-      for (let i = 0; i < passive.length; i += 4) { // Target batch size: 4
-        batches.push(passive.slice(i, i + 4));
-      }
+      // Create dynamically scaled passive batches based on total passive queue size
+      const batches = calculatePassiveBatches(passive);
       setPassiveBatches(batches);
 
       const savedPhase = sessionStorage.getItem('lingoloop_review_phase');

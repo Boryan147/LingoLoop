@@ -108,9 +108,10 @@ export const generateIntakeAI = async (
 export const generateDailyPassiveContext = async (items: VocabularyItem[]): Promise<string> => {
   try {
     const wordsList = items.map(item => item.word_or_phrase).join(', ');
+    const targetWordCount = Math.max(80, items.length * 20);
     const response = await callWithRetry(() => ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: `Write a short, engaging, and cohesive micro-story or dialogue (under 100 words) using these specific words naturally: ${wordsList}.
+      contents: `Write an engaging, cohesive micro-story or dialogue (around ${targetWordCount} words) using these specific words naturally: ${wordsList}.
       IMPORTANT: Wrap each of the target words/phrases in <strong> tags in the story. Keep it natural and simple for learning.`,
     }));
     return response.text?.trim() || "Failed to generate story.";
