@@ -111,8 +111,16 @@ export const generateDailyPassiveContext = async (items: VocabularyItem[]): Prom
     const targetWordCount = Math.max(80, items.length * 20);
     const response = await callWithRetry(() => ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: `Write an engaging, cohesive micro-story or dialogue (around ${targetWordCount} words) using these specific words naturally: ${wordsList}.
-      IMPORTANT: Wrap each of the target words/phrases in <strong> tags in the story. Keep it natural and simple for learning.`,
+      contents: `Write an engaging, cohesive micro-story or dialogue (around ${targetWordCount} words) using these specific target words naturally: ${wordsList}.
+
+      DIFFICULTY & VOCABULARY LEVEL REQUIREMENTS:
+      1. Target Audience Level: TOEFL ~100 points / B2 upper-intermediate English learner level.
+      2. Keep the non-target vocabulary clean, accessible, and high-frequency. Avoid overly archaic, obscure, complex academic, or dense literary phrasing outside of the target words.
+      3. Use clear, standard sentence structures and natural conversational or narrative flow.
+      4. Provide clear surrounding context for each target word so its meaning and usage are easy to follow and comprehend.
+
+      CRITICAL FORMATTING:
+      - Wrap each of the target words/phrases in <strong> tags in the story (e.g., <strong>expression</strong>).`,
     }));
     return response.text?.trim() || "Failed to generate story.";
   } catch (error) {
