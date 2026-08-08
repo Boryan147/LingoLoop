@@ -105,6 +105,51 @@ export const generateIntakeAI = async (
   }
 };
 
+export const formatStoryHTML = (
+  rawStory: string,
+  targetItems: { word_or_phrase: string }[] = []
+): string => {
+  if (!rawStory) return '';
+
+  let processed = rawStory;
+
+  // 1. Standardize markdown bold syntax (**word**) and <b> tags to <strong>
+  processed = processed.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  processed = processed.replace(/<b>(.*?)<\/b>/gi, '<strong>$1</strong>');
+
+  // 2. Ensure all target items are wrapped in <strong> tags if missing from LLM output
+  if (targetItems && targetItems.length > 0) {
+    const sortedTargets = [...targetItems].sort(
+      (a, b) => b.word_or_phrase.length - a.word_or_phrase.length
+    );
+
+    sortedTargets.forEach(item => {
+      const phrase = item.word_or_phrase.trim();
+      if (!phrase) return;
+
+      const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+      const parts = processed.split(/(<[^>]+>)/g);
+      let insideStrong = false;
+
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        if (part.startsWith('<')) {
+          if (/<strong/i.test(part)) insideStrong = true;
+          if (/<\/strong>/i.test(part)) insideStrong = false;
+        } else if (!insideStrong && part.trim().length > 0) {
+          const regex = new RegExp(`\\b(${escaped})\\b`, 'gi');
+          parts[i] = part.replace(regex, '<strong>$1</strong>');
+        }
+      }
+
+      processed = parts.join('');
+    });
+  }
+
+  return processed;
+};
+
 export const generateDailyPassiveContext = async (items: VocabularyItem[]): Promise<string> => {
   try {
     const wordsList = items.map(item => item.word_or_phrase).join(', ');
@@ -122,7 +167,8 @@ export const generateDailyPassiveContext = async (items: VocabularyItem[]): Prom
       CRITICAL FORMATTING:
       - Wrap each of the target words/phrases in <strong> tags in the story (e.g., <strong>expression</strong>).`,
     }));
-    return response.text?.trim() || "Failed to generate story.";
+    const rawStory = response.text?.trim() || "Failed to generate story.";
+    return formatStoryHTML(rawStory, items);
   } catch (error) {
     console.error("Gemini Micro-Story Error:", error);
     throw new Error("Failed to generate micro-story.");

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { VocabularyItem } from '../types';
 import { calculateNextReview, getInitialSRSState } from '../services/srs';
-import { generateDailyPassiveContext, evaluateSentence, generateIntakeAI } from '../services/gemini';
+import { generateDailyPassiveContext, evaluateSentence, generateIntakeAI, formatStoryHTML } from '../services/gemini';
 import * as storage from '../services/storage';
 import { PartyPopper, Lightbulb, Zap, Eye, Sparkles, Check, HelpCircle, Loader2, ExternalLink, X, AlertCircle, CheckCircle2, Plus } from 'lucide-react';
 
@@ -697,8 +697,8 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
                 ) : (
                   <>
                     <p 
-                      className="text-lg text-slate-800 leading-relaxed font-sans mb-6 font-medium"
-                      dangerouslySetInnerHTML={{ __html: currentStory || "No story context generated." }}
+                      className="text-lg text-slate-800 leading-relaxed font-sans mb-6 font-medium story-text"
+                      dangerouslySetInnerHTML={{ __html: formatStoryHTML(currentStory, passiveBatches[currentBatchIndex]) || "No story context generated." }}
                     />
                     
                     {/* Capture word button */}
