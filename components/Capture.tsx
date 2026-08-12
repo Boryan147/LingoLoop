@@ -88,14 +88,15 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
     }
   });
 
+  const [originalInput, setOriginalInput] = useState<string | null>(null);
+  const [aiChunk, setAiChunk] = useState<string | null>(null);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'ALL' | 'ACTIVE' | 'PASSIVE'>('ALL');
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-
 
   const [showScrollTop, setShowScrollTop] = useState(false);
 
@@ -145,16 +146,26 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
     }
   };
 
-
-
   const handleGenerate = async () => {
     if (!wordOrPhrase.trim()) return;
     setIsGenerating(true);
     setError(null);
+    const typedBeforeAI = wordOrPhrase.trim();
     try {
       const result = await generateIntakeAI(wordOrPhrase, vocabType, contextHint, synonymsString.trim());
       if (vocabType === 'ACTIVE') {
-        setWordOrPhrase(result.word_or_phrase);
+        const generatedChunk = result.word_or_phrase.trim();
+        if (generatedChunk.toLowerCase() !== typedBeforeAI.toLowerCase()) {
+          setOriginalInput(typedBeforeAI);
+          setAiChunk(generatedChunk);
+        } else {
+          setOriginalInput(null);
+          setAiChunk(null);
+        }
+        setWordOrPhrase(generatedChunk);
+      } else {
+        setOriginalInput(null);
+        setAiChunk(null);
       }
       setDefinition(result.definition);
       setExamplesString(result.examples ? result.examples.join('\n') : '');
@@ -170,6 +181,8 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
     localStorage.removeItem('lingoloop_capture_draft');
     localStorage.removeItem('lingoloop_capture_draft_editing');
     setWordOrPhrase('');
+    setOriginalInput(null);
+    setAiChunk(null);
     setContextHint('');
     setDefinition('');
     setExamplesString('');
@@ -245,6 +258,8 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
 
   const handleStartEdit = (item: VocabularyItem) => {
     setEditingItem(item);
+    setOriginalInput(null);
+    setAiChunk(null);
     setWordOrPhrase(item.word_or_phrase);
     setVocabType(item.type);
     setContextHint(item.context_hint);
@@ -334,6 +349,57 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
                 disabled={isSaving}
                 required
               />
+
+              {vocabType === 'ACTIVE' && originalInput && aiChunk && (
+                <div className="mt-2.5 p-3 bg-emerald-50/90 border border-emerald-200/90 rounded-xl text-xs space-y-2 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-emerald-900 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      AI transformed active expression:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOriginalInput(null);
+                        setAiChunk(null);
+                      }}
+                      className="text-slate-400 hover:text-slate-600 p-0.5"
+                      title="Dismiss option banner"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2 pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setWordOrPhrase(originalInput)}
+                      className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1.5 text-left border ${
+                        wordOrPhrase.trim() === originalInput.trim()
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                          : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50'
+                      }`}
+                    >
+                      <span className="opacity-75 font-normal">Keep Original:</span>
+                      <span className="font-bold">"{originalInput}"</span>
+                      {wordOrPhrase.trim() === originalInput.trim() && <CheckCircle2 className="w-3.5 h-3.5 ml-1 shrink-0 text-white" />}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setWordOrPhrase(aiChunk)}
+                      className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1.5 text-left border ${
+                        wordOrPhrase.trim() === aiChunk.trim()
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                          : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50'
+                      }`}
+                    >
+                      <span className="opacity-75 font-normal">Use AI Chunk:</span>
+                      <span className="font-bold">"{aiChunk}"</span>
+                      {wordOrPhrase.trim() === aiChunk.trim() && <CheckCircle2 className="w-3.5 h-3.5 ml-1 shrink-0 text-white" />}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Vocabulary Type</label>

@@ -95,6 +95,8 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
   const [modalExamples, setModalExamples] = useState('');
   const [modalSynonyms, setModalSynonyms] = useState('');
   const [modalWordFamily, setModalWordFamily] = useState('');
+  const [modalOriginalInput, setModalOriginalInput] = useState<string | null>(null);
+  const [modalAiChunk, setModalAiChunk] = useState<string | null>(null);
   const [isModalGenerating, setIsModalGenerating] = useState(false);
   const [isModalSaving, setIsModalSaving] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
@@ -108,6 +110,8 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
     setModalExamples('');
     setModalSynonyms('');
     setModalWordFamily('');
+    setModalOriginalInput(null);
+    setModalAiChunk(null);
     setModalError(null);
     setIsCaptureModalOpen(true);
   };
@@ -116,10 +120,22 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
     if (!modalWord.trim()) return;
     setIsModalGenerating(true);
     setModalError(null);
+    const typedBeforeAI = modalWord.trim();
     try {
       const result = await generateIntakeAI(modalWord, modalType, modalContext, modalSynonyms.trim());
       if (modalType === 'ACTIVE') {
-        setModalWord(result.word_or_phrase);
+        const generatedChunk = result.word_or_phrase.trim();
+        if (generatedChunk.toLowerCase() !== typedBeforeAI.toLowerCase()) {
+          setModalOriginalInput(typedBeforeAI);
+          setModalAiChunk(generatedChunk);
+        } else {
+          setModalOriginalInput(null);
+          setModalAiChunk(null);
+        }
+        setModalWord(generatedChunk);
+      } else {
+        setModalOriginalInput(null);
+        setModalAiChunk(null);
       }
       setModalDefinition(result.definition);
       setModalExamples(result.examples ? result.examples.join('\n') : '');
@@ -879,6 +895,57 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
                     className="w-full text-sm p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-slate-900 font-medium"
                     required
                   />
+
+                  {modalType === 'ACTIVE' && modalOriginalInput && modalAiChunk && (
+                    <div className="mt-2.5 p-2.5 bg-emerald-50/90 border border-emerald-200/90 rounded-xl text-xs space-y-1.5 animate-in fade-in duration-200">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-emerald-900 flex items-center gap-1">
+                          <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          AI transformed active expression:
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setModalOriginalInput(null);
+                            setModalAiChunk(null);
+                          }}
+                          className="text-slate-400 hover:text-slate-600 p-0.5"
+                          title="Dismiss option banner"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setModalWord(modalOriginalInput)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1 text-left border ${
+                            modalWord.trim() === modalOriginalInput.trim()
+                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                              : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50'
+                          }`}
+                        >
+                          <span className="opacity-75 font-normal">Keep Original:</span>
+                          <span className="font-bold">"{modalOriginalInput}"</span>
+                          {modalWord.trim() === modalOriginalInput.trim() && <CheckCircle2 className="w-3 h-3 ml-0.5 shrink-0 text-white" />}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setModalWord(modalAiChunk)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1 text-left border ${
+                            modalWord.trim() === modalAiChunk.trim()
+                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                              : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50'
+                          }`}
+                        >
+                          <span className="opacity-75 font-normal">Use AI Chunk:</span>
+                          <span className="font-bold">"{modalAiChunk}"</span>
+                          {modalWord.trim() === modalAiChunk.trim() && <CheckCircle2 className="w-3 h-3 ml-0.5 shrink-0 text-white" />}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Type</label>
