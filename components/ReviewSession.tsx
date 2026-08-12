@@ -95,8 +95,18 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
   const [modalExamples, setModalExamples] = useState('');
   const [modalSynonyms, setModalSynonyms] = useState('');
   const [modalWordFamily, setModalWordFamily] = useState('');
+  interface CandidateResult {
+    word_or_phrase: string;
+    definition: string;
+    examples: string[];
+    synonyms: string[];
+  }
+
   const [modalOriginalInput, setModalOriginalInput] = useState<string | null>(null);
   const [modalAiChunk, setModalAiChunk] = useState<string | null>(null);
+  const [modalAiChunkResult, setModalAiChunkResult] = useState<CandidateResult | null>(null);
+  const [modalOriginalResult, setModalOriginalResult] = useState<CandidateResult | null>(null);
+  const [isModalGeneratingOriginalMeaning, setIsModalGeneratingOriginalMeaning] = useState(false);
   const [isModalGenerating, setIsModalGenerating] = useState(false);
   const [isModalSaving, setIsModalSaving] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
@@ -112,6 +122,9 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
     setModalWordFamily('');
     setModalOriginalInput(null);
     setModalAiChunk(null);
+    setModalAiChunkResult(null);
+    setModalOriginalResult(null);
+    setIsModalGeneratingOriginalMeaning(false);
     setModalError(null);
     setIsCaptureModalOpen(true);
   };
@@ -128,14 +141,20 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
         if (generatedChunk.toLowerCase() !== typedBeforeAI.toLowerCase()) {
           setModalOriginalInput(typedBeforeAI);
           setModalAiChunk(generatedChunk);
+          setModalAiChunkResult(result);
+          setModalOriginalResult(null);
         } else {
           setModalOriginalInput(null);
           setModalAiChunk(null);
+          setModalAiChunkResult(null);
+          setModalOriginalResult(null);
         }
         setModalWord(generatedChunk);
       } else {
         setModalOriginalInput(null);
         setModalAiChunk(null);
+        setModalAiChunkResult(null);
+        setModalOriginalResult(null);
       }
       setModalDefinition(result.definition);
       setModalExamples(result.examples ? result.examples.join('\n') : '');
@@ -144,6 +163,39 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
       setModalError(err.message || 'Failed to generate content with AI.');
     } finally {
       setIsModalGenerating(false);
+    }
+  };
+
+  const handleModalSelectOriginal = async () => {
+    if (!modalOriginalInput) return;
+    setModalWord(modalOriginalInput);
+    if (modalOriginalResult) {
+      setModalDefinition(modalOriginalResult.definition);
+      setModalExamples(modalOriginalResult.examples ? modalOriginalResult.examples.join('\n') : '');
+      setModalSynonyms(modalOriginalResult.synonyms ? modalOriginalResult.synonyms.join(', ') : '');
+    } else {
+      setIsModalGeneratingOriginalMeaning(true);
+      try {
+        const result = await generateIntakeAI(modalOriginalInput, 'ACTIVE', modalContext, modalSynonyms.trim(), true);
+        setModalOriginalResult(result);
+        setModalDefinition(result.definition);
+        setModalExamples(result.examples ? result.examples.join('\n') : '');
+        setModalSynonyms(result.synonyms ? result.synonyms.join(', ') : '');
+      } catch (err: any) {
+        console.error("Failed to generate modal original word meaning:", err);
+      } finally {
+        setIsModalGeneratingOriginalMeaning(false);
+      }
+    }
+  };
+
+  const handleModalSelectAiChunk = () => {
+    if (!modalAiChunk) return;
+    setModalWord(modalAiChunk);
+    if (modalAiChunkResult) {
+      setModalDefinition(modalAiChunkResult.definition);
+      setModalExamples(modalAiChunkResult.examples ? modalAiChunkResult.examples.join('\n') : '');
+      setModalSynonyms(modalAiChunkResult.synonyms ? modalAiChunkResult.synonyms.join(', ') : '');
     }
   };
 
@@ -918,21 +970,27 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
                       <div className="flex flex-wrap gap-1.5 pt-0.5">
                         <button
                           type="button"
-                          onClick={() => setModalWord(modalOriginalInput)}
+                          onClick={handleModalSelectOriginal}
+                          disabled={isModalGeneratingOriginalMeaning}
                           className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1 text-left border ${
                             modalWord.trim() === modalOriginalInput.trim()
                               ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
                               : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50'
                           }`}
                         >
+                          {isModalGeneratingOriginalMeaning ? (
+                            <Loader2 className="w-3 h-3 animate-spin shrink-0 text-emerald-600" />
+                          ) : null}
                           <span className="opacity-75 font-normal">Keep Original:</span>
                           <span className="font-bold">"{modalOriginalInput}"</span>
-                          {modalWord.trim() === modalOriginalInput.trim() && <CheckCircle2 className="w-3 h-3 ml-0.5 shrink-0 text-white" />}
+                          {modalWord.trim() === modalOriginalInput.trim() && !isModalGeneratingOriginalMeaning && (
+                            <CheckCircle2 className="w-3 h-3 ml-0.5 shrink-0 text-white" />
+                          )}
                         </button>
 
                         <button
                           type="button"
-                          onClick={() => setModalWord(modalAiChunk)}
+                          onClick={handleModalSelectAiChunk}
                           className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1 text-left border ${
                             modalWord.trim() === modalAiChunk.trim()
                               ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'

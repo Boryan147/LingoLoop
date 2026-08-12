@@ -28,7 +28,8 @@ export const generateIntakeAI = async (
   input: string,
   type: 'ACTIVE' | 'PASSIVE',
   contextHint?: string,
-  synonym?: string
+  synonym?: string,
+  exactInput: boolean = false
 ): Promise<IntakeResponse> => {
   try {
     const isPassive = type === 'PASSIVE';
@@ -37,15 +38,27 @@ export const generateIntakeAI = async (
       ? `The user also provided a synonym they want to associate/compare: "${synonym}". Crucially, compare the main expression and this synonym "${synonym}" in the definition output (e.g. explain the definition of the main expression first, and then add a clear note on when to use one vs the other). Also, return "${synonym}" in the synonyms array, and generate example sentences for each synonym.`
       : 'Do NOT suggest or generate any synonyms. Return an empty array [] in the synonyms field.';
 
-    const systemPrompt = isPassive
-      ? `You are an expert English tutor. The user is capturing a PASSIVE vocabulary item.
+    let systemPrompt = '';
+    if (isPassive) {
+      systemPrompt = `You are an expert English tutor. The user is capturing a PASSIVE vocabulary item.
          Input expression: "${input}".
          ${contextPart}
          ${synonymPart}
          Provide a clear, simple English explanation (under 35 words).
          Generate exactly 3 natural example sentences for the main expression.
-         CRITICAL: If a synonym is provided, also generate 1 natural conversational example sentence for each synonym. Prefix it with "[Synonym: <synonym_word>] " (e.g. "[Synonym: initiate] ...") and append it to the examples array.`
-      : `You are an expert English tutor. The user wants to capture an ACTIVE vocabulary item to learn to speak naturally and effortlessly.
+         CRITICAL: If a synonym is provided, also generate 1 natural conversational example sentence for each synonym. Prefix it with "[Synonym: <synonym_word>] " (e.g. "[Synonym: initiate] ...") and append it to the examples array.`;
+    } else if (exactInput) {
+      systemPrompt = `You are an expert English tutor. The user is capturing an ACTIVE vocabulary item for the exact expression/word: "${input}".
+         ${contextPart}
+         ${synonymPart}
+         
+         Instructions:
+         1. Do NOT transform or expand the input expression into a full sentence chunk or template. Keep the main word/expression exact: "${input}".
+         2. Provide a brief, 1-sentence explanation of its conversational usage, nuance, and scenario (under 35 words).
+         3. Generate exactly 3 example sentences showing usage of "${input}" in DIFFERENT conversational tones (Casual/Colloquial, Polite/Professional, and Direct/Emphatic). Prefix each sentence with its tone label, e.g. "[Casual] ...", "[Polite] ...", "[Direct] ...".
+         4. CRITICAL: If a synonym is provided, also generate 1 natural conversational example sentence for each synonym. Prefix it with "[Synonym: <synonym_word>] " (e.g. "[Synonym: initiate] ...") and append it to the examples array.`;
+    } else {
+      systemPrompt = `You are an expert English tutor. The user wants to capture an ACTIVE vocabulary item to learn to speak naturally and effortlessly.
          Input thought/expression to translate (Chinese or simple English): "${input}".
          ${contextPart}
          ${synonymPart}
@@ -56,6 +69,7 @@ export const generateIntakeAI = async (
          2. Provide a brief, 1-sentence explanation of its conversational usage, nuance, and scenario (under 35 words).
          3. Generate exactly 3 example sentences showing usage of the main expression in DIFFERENT conversational tones (Casual/Colloquial, Polite/Professional, and Direct/Emphatic). Prefix each sentence with its tone label, e.g. "[Casual] ...", "[Polite] ...", "[Direct] ...".
          4. CRITICAL: If a synonym is provided, also generate 1 natural conversational example sentence for each synonym. Prefix it with "[Synonym: <synonym_word>] " (e.g. "[Synonym: initiate] ...") and append it to the examples array.`;
+    }
 
     const response = await callWithRetry(() => ai.models.generateContent({
       model: 'gemini-2.5-flash',
@@ -67,7 +81,7 @@ export const generateIntakeAI = async (
           properties: {
             word_or_phrase: { 
               type: Type.STRING, 
-              description: isPassive 
+              description: (isPassive || exactInput)
                 ? "Return the input word/phrase exactly as provided" 
                 : "The authentic spoken English expression, idiom, or sentence chunk matching the input thought (prefer full ready-to-use sentence chunks for common concepts)"
             },

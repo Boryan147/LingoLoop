@@ -88,8 +88,18 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
     }
   });
 
+  interface CandidateResult {
+    word_or_phrase: string;
+    definition: string;
+    examples: string[];
+    synonyms: string[];
+  }
+
   const [originalInput, setOriginalInput] = useState<string | null>(null);
   const [aiChunk, setAiChunk] = useState<string | null>(null);
+  const [aiChunkResult, setAiChunkResult] = useState<CandidateResult | null>(null);
+  const [originalResult, setOriginalResult] = useState<CandidateResult | null>(null);
+  const [isGeneratingOriginalMeaning, setIsGeneratingOriginalMeaning] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'ALL' | 'ACTIVE' | 'PASSIVE'>('ALL');
@@ -158,14 +168,20 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
         if (generatedChunk.toLowerCase() !== typedBeforeAI.toLowerCase()) {
           setOriginalInput(typedBeforeAI);
           setAiChunk(generatedChunk);
+          setAiChunkResult(result);
+          setOriginalResult(null);
         } else {
           setOriginalInput(null);
           setAiChunk(null);
+          setAiChunkResult(null);
+          setOriginalResult(null);
         }
         setWordOrPhrase(generatedChunk);
       } else {
         setOriginalInput(null);
         setAiChunk(null);
+        setAiChunkResult(null);
+        setOriginalResult(null);
       }
       setDefinition(result.definition);
       setExamplesString(result.examples ? result.examples.join('\n') : '');
@@ -177,12 +193,48 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
     }
   };
 
+  const handleSelectOriginal = async () => {
+    if (!originalInput) return;
+    setWordOrPhrase(originalInput);
+    if (originalResult) {
+      setDefinition(originalResult.definition);
+      setExamplesString(originalResult.examples ? originalResult.examples.join('\n') : '');
+      setSynonymsString(originalResult.synonyms ? originalResult.synonyms.join(', ') : '');
+    } else {
+      setIsGeneratingOriginalMeaning(true);
+      try {
+        const result = await generateIntakeAI(originalInput, 'ACTIVE', contextHint, synonymsString.trim(), true);
+        setOriginalResult(result);
+        setDefinition(result.definition);
+        setExamplesString(result.examples ? result.examples.join('\n') : '');
+        setSynonymsString(result.synonyms ? result.synonyms.join(', ') : '');
+      } catch (err: any) {
+        console.error("Failed to generate original word meaning:", err);
+      } finally {
+        setIsGeneratingOriginalMeaning(false);
+      }
+    }
+  };
+
+  const handleSelectAiChunk = () => {
+    if (!aiChunk) return;
+    setWordOrPhrase(aiChunk);
+    if (aiChunkResult) {
+      setDefinition(aiChunkResult.definition);
+      setExamplesString(aiChunkResult.examples ? aiChunkResult.examples.join('\n') : '');
+      setSynonymsString(aiChunkResult.synonyms ? aiChunkResult.synonyms.join(', ') : '');
+    }
+  };
+
   const clearDraft = () => {
     localStorage.removeItem('lingoloop_capture_draft');
     localStorage.removeItem('lingoloop_capture_draft_editing');
     setWordOrPhrase('');
     setOriginalInput(null);
     setAiChunk(null);
+    setAiChunkResult(null);
+    setOriginalResult(null);
+    setIsGeneratingOriginalMeaning(false);
     setContextHint('');
     setDefinition('');
     setExamplesString('');
@@ -372,21 +424,27 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
                   <div className="flex flex-wrap gap-2 pt-0.5">
                     <button
                       type="button"
-                      onClick={() => setWordOrPhrase(originalInput)}
+                      onClick={handleSelectOriginal}
+                      disabled={isGeneratingOriginalMeaning}
                       className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1.5 text-left border ${
                         wordOrPhrase.trim() === originalInput.trim()
                           ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
                           : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50'
                       }`}
                     >
+                      {isGeneratingOriginalMeaning ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0 text-emerald-600" />
+                      ) : null}
                       <span className="opacity-75 font-normal">Keep Original:</span>
                       <span className="font-bold">"{originalInput}"</span>
-                      {wordOrPhrase.trim() === originalInput.trim() && <CheckCircle2 className="w-3.5 h-3.5 ml-1 shrink-0 text-white" />}
+                      {wordOrPhrase.trim() === originalInput.trim() && !isGeneratingOriginalMeaning && (
+                        <CheckCircle2 className="w-3.5 h-3.5 ml-1 shrink-0 text-white" />
+                      )}
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => setWordOrPhrase(aiChunk)}
+                      onClick={handleSelectAiChunk}
                       className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1.5 text-left border ${
                         wordOrPhrase.trim() === aiChunk.trim()
                           ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
