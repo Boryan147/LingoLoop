@@ -392,15 +392,26 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">
                 {vocabType === 'ACTIVE' ? 'Your Thoughts (Chinese or Simple English)' : 'English Expression / Word'}
               </label>
-              <input
-                type="text"
-                value={wordOrPhrase}
-                onChange={(e) => setWordOrPhrase(e.target.value)}
-                placeholder={vocabType === 'ACTIVE' ? "e.g. 表达不想内卷了，顺其自然" : "e.g. obfuscate"}
-                className="w-full text-base p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-                disabled={isSaving}
-                required
-              />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={wordOrPhrase}
+                  onChange={(e) => setWordOrPhrase(e.target.value)}
+                  placeholder={vocabType === 'ACTIVE' ? "e.g. 表达不想内卷了，顺其自然" : "e.g. obfuscate"}
+                  className="flex-1 text-base p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                  disabled={isSaving}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={handleGenerate}
+                  disabled={isGenerating || !wordOrPhrase.trim()}
+                  className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 disabled:opacity-50 transition-all duration-150 shadow-md hover:shadow-lg shrink-0 cursor-pointer select-none"
+                >
+                  {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 text-yellow-300 fill-current" />}
+                  <span>AI Generate Assist</span>
+                </button>
+              </div>
 
               {vocabType === 'ACTIVE' && originalInput && aiChunk && (
                 <div className="mt-2.5 p-3 bg-emerald-50/90 border border-emerald-200/90 rounded-xl text-xs space-y-2 animate-in fade-in duration-200">
@@ -426,7 +437,7 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
                       type="button"
                       onClick={handleSelectOriginal}
                       disabled={isGeneratingOriginalMeaning}
-                      className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1.5 text-left border ${
+                      className={`px-3 py-1.5 rounded-lg font-medium active:scale-95 transition-all flex items-center gap-1.5 text-left border cursor-pointer ${
                         wordOrPhrase.trim() === originalInput.trim()
                           ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
                           : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50'
@@ -445,7 +456,7 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
                     <button
                       type="button"
                       onClick={handleSelectAiChunk}
-                      className={`px-3 py-1.5 rounded-lg font-medium transition-all flex items-center gap-1.5 text-left border ${
+                      className={`px-3 py-1.5 rounded-lg font-medium active:scale-95 transition-all flex items-center gap-1.5 text-left border cursor-pointer ${
                         wordOrPhrase.trim() === aiChunk.trim()
                           ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
                           : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50'
@@ -468,7 +479,7 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
                     setVocabType('ACTIVE');
                     setExamplesString('');
                   }}
-                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${vocabType === 'ACTIVE' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1 ${vocabType === 'ACTIVE' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                 >
                   <Zap className="w-3.5 h-3.5" />
                   Active
@@ -479,7 +490,7 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
                     setVocabType('PASSIVE');
                     setExamplesString('');
                   }}
-                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${vocabType === 'PASSIVE' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1 ${vocabType === 'PASSIVE' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                 >
                   <Eye className="w-3.5 h-3.5" />
                   Passive
@@ -505,18 +516,7 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
 
           {/* Definition */}
           <div>
-            <div className="flex justify-between items-center mb-1">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Definition / Nuance</label>
-              <button
-                type="button"
-                onClick={handleGenerate}
-                disabled={isGenerating || !wordOrPhrase.trim()}
-                className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 disabled:opacity-50 transition-all"
-              >
-                {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3 text-indigo-500" />}
-                AI Generate Assist
-              </button>
-            </div>
+            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Definition / Nuance</label>
             <textarea
               value={definition}
               onChange={(e) => setDefinition(e.target.value)}
@@ -583,7 +583,7 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
             <button
               type="submit"
               disabled={isSaving || isGenerating || !wordOrPhrase || !definition}
-              className="flex-1 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+              className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white font-bold rounded-xl shadow-md hover:shadow-lg disabled:opacity-50 transition-all duration-150 flex items-center justify-center gap-2 cursor-pointer text-sm"
             >
               {isSaving ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -598,7 +598,7 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
               <button
                 type="button"
                 onClick={handleCancelEdit}
-                className="px-6 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl transition-all"
+                className="px-6 py-3 bg-slate-200 hover:bg-slate-300 active:scale-[0.98] text-slate-700 font-bold rounded-xl transition-all cursor-pointer text-sm"
               >
                 Cancel
               </button>
