@@ -3,7 +3,7 @@ import { VocabularyItem } from '../types';
 import { calculateNextReview, getInitialSRSState } from '../services/srs';
 import { generateDailyPassiveContext, evaluateSentence, generateIntakeAI, formatStoryHTML } from '../services/gemini';
 import * as storage from '../services/storage';
-import { PartyPopper, Lightbulb, Zap, Eye, Sparkles, Check, HelpCircle, Loader2, ExternalLink, X, AlertCircle, CheckCircle2, Plus } from 'lucide-react';
+import { PartyPopper, Lightbulb, Zap, Eye, Sparkles, Check, HelpCircle, Loader2, ExternalLink, X, AlertCircle, CheckCircle2, Plus, RefreshCw } from 'lucide-react';
 
 interface ReviewSessionProps {
   onComplete: () => void;
@@ -66,8 +66,8 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
     try {
       const result = await evaluateSentence(wordOrPhrase, sentenceInput);
       setSentenceFeedback(result);
-    } catch (err) {
-      setSentenceError("Failed to evaluate sentence. Try again.");
+    } catch (err: any) {
+      setSentenceError(err.message || "Failed to evaluate sentence. Try again.");
     } finally {
       setSentenceEvaluating(false);
     }
@@ -254,6 +254,7 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
     return sessionStorage.getItem('lingoloop_review_story') || '';
   });
   const [isGeneratingStory, setIsGeneratingStory] = useState(false);
+  const [storyError, setStoryError] = useState<string | null>(null);
 
   // Batch states
   const [revealedIds, setRevealedIds] = useState<Record<string, boolean>>({});
@@ -364,6 +365,25 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
     fetchDue();
   }, [userId]);
 
+  const loadBatchStory = async () => {
+    setIsGeneratingStory(true);
+    setStoryError(null);
+    setCurrentStory('');
+    setRevealedIds({});
+    setBatchRatings({});
+    
+    try {
+      const batch = passiveBatches[currentBatchIndex];
+      const story = await generateDailyPassiveContext(batch);
+      setCurrentStory(story);
+    } catch (err: any) {
+      console.error("Story context loading error", err);
+      setStoryError(err.message || "Failed to generate story context.");
+    } finally {
+      setIsGeneratingStory(false);
+    }
+  };
+
   // Handle micro-story generation and TTS loading when entering a new PASSIVE batch
   useEffect(() => {
     if (phase === 'PASSIVE' && passiveBatches.length > 0 && currentBatchIndex < passiveBatches.length) {
@@ -375,22 +395,6 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
         return;
       }
 
-      const loadBatchStory = async () => {
-        setIsGeneratingStory(true);
-        setCurrentStory('');
-        setRevealedIds({});
-        setBatchRatings({});
-        
-        try {
-          const batch = passiveBatches[currentBatchIndex];
-          const story = await generateDailyPassiveContext(batch);
-          setCurrentStory(story);
-        } catch (err) {
-          console.error("Story context loading error", err);
-        } finally {
-          setIsGeneratingStory(false);
-        }
-      };
       loadBatchStory();
     }
   }, [phase, currentBatchIndex, passiveBatches]);
@@ -761,6 +765,23 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
                   <div className="py-12 flex flex-col items-center justify-center text-slate-400 gap-2">
                     <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
                     <span className="text-sm font-medium">Generating story context...</span>
+                  </div>
+                ) : storyError ? (
+                  <div className="py-8 flex flex-col items-center justify-center text-center gap-3">
+                    <div className="p-3 bg-red-50 text-red-500 rounded-full">
+                      <AlertCircle className="w-6 h-6" />
+                    </div>
+                    <div className="space-y-1 max-w-md">
+                      <p className="text-sm font-bold text-slate-800">Story Generation Failed</p>
+                      <p className="text-xs text-slate-500">{storyError}</p>
+                    </div>
+                    <button
+                      onClick={loadBatchStory}
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer mt-1"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Retry Story Generation</span>
+                    </button>
                   </div>
                 ) : (
                   <>

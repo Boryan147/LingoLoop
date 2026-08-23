@@ -1,19 +1,88 @@
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { VocabularyItem } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+const API_KEY = (typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env.VITE_GEMINI_API_KEY : undefined;
+const ai = new GoogleGenAI({ apiKey: API_KEY || '' });
 
-const callWithRetry = async <T>(fn: () => Promise<T>, retries: number = 3, delay: number = 1000): Promise<T> => {
-  try {
-    return await fn();
-  } catch (error) {
-    if (retries <= 1) {
-      throw error;
-    }
-    console.warn(`Gemini call failed, retrying in ${delay}ms...`, error);
-    await new Promise(resolve => setTimeout(resolve, delay));
-    return callWithRetry(fn, retries - 1, delay * 2);
+const checkApiKey = () => {
+  if (!API_KEY || API_KEY.trim() === '' || API_KEY === 'undefined') {
+    throw new Error("Gemini API key is missing. Please configure VITE_GEMINI_API_KEY in your .env file.");
   }
+};
+
+/**
+ * Safely extracts text from Gemini API response objects.
+ */
+export const extractResponseText = (response: any): string => {
+  if (!response) return '';
+  try {
+    if (typeof response.text === 'string' && response.text.length > 0) {
+      return response.text;
+    }
+  } catch (e) {
+    // response.text getter throws if candidate finishReason is not STOP
+  }
+  const candidate = response?.candidates?.[0];
+  if (candidate?.content?.parts) {
+    return candidate.content.parts
+      .map((part: any) => part.text || '')
+      .join('')
+      .trim();
+  }
+  return '';
+};
+
+/**
+ * Strips markdown code blocks and extracts valid JSON object/array substring.
+ */
+export const cleanAndParseJSON = (text: string): any => {
+  if (!text) return {};
+  let cleaned = text.trim();
+  
+  // Strip markdown code fences (```json ... ``` or ``` ...)
+  if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  }
+
+  // Extract JSON object or array substring if wrapped in extra text
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+  const firstBracket = cleaned.indexOf('[');
+  const lastBracket = cleaned.lastIndexOf(']');
+
+  if (firstBrace !== -1 && lastBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+    cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+  } else if (firstBracket !== -1 && lastBracket !== -1) {
+    cleaned = cleaned.substring(firstBracket, lastBracket + 1);
+  }
+
+  return JSON.parse(cleaned);
+};
+
+const callWithRetry = async <T>(
+  fn: (modelName: string) => Promise<T>,
+  models: string[] = ['gemini-2.5-flash', 'gemini-1.5-flash'],
+  retriesPerModel: number = 2,
+  delay: number = 1000
+): Promise<T> => {
+  checkApiKey();
+  let lastError: any = null;
+
+  for (const model of models) {
+    for (let attempt = 1; attempt <= retriesPerModel; attempt++) {
+      try {
+        return await fn(model);
+      } catch (error: any) {
+        lastError = error;
+        console.warn(`Gemini API call failed using model '${model}' (attempt ${attempt}/${retriesPerModel}):`, error?.message || error);
+        if (attempt < retriesPerModel) {
+          await new Promise(resolve => setTimeout(resolve, delay * attempt));
+        }
+      }
+    }
+  }
+
+  throw lastError || new Error("Gemini API call failed after retries.");
 };
 
 export interface IntakeResponse {
@@ -71,8 +140,8 @@ export const generateIntakeAI = async (
          4. CRITICAL: If a synonym is provided, also generate 1 natural conversational example sentence for each synonym. Prefix it with "[Synonym: <synonym_word>] " (e.g. "[Synonym: initiate] ...") and append it to the examples array.`;
     }
 
-    const response = await callWithRetry(() => ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+    const response = await callWithRetry((model) => ai.models.generateContent({
+      model,
       contents: systemPrompt,
       config: {
         responseMimeType: "application/json",
@@ -105,7 +174,9 @@ export const generateIntakeAI = async (
       }
     }));
 
-    const result = JSON.parse(response.text || '{}');
+    const text = extractResponseText(response);
+    const result = cleanAndParseJSON(text);
+
     return {
       word_or_phrase: result.word_or_phrase || input,
       definition: result.definition || 'Definition unavailable.',
@@ -113,9 +184,10 @@ export const generateIntakeAI = async (
       synonyms: result.synonyms || [],
       word_family: []
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini Intake AI Error:", error);
-    throw new Error("Failed to process with AI. Check connection or API key.");
+    const detail = error?.message || "Failed to process with AI.";
+    throw new Error(detail);
   }
 };
 
@@ -168,8 +240,8 @@ export const generateDailyPassiveContext = async (items: VocabularyItem[]): Prom
   try {
     const wordsList = items.map(item => item.word_or_phrase).join(', ');
     const targetWordCount = Math.max(80, items.length * 20);
-    const response = await callWithRetry(() => ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+    const response = await callWithRetry((model) => ai.models.generateContent({
+      model,
       contents: `Write an engaging, cohesive micro-story or dialogue (around ${targetWordCount} words) using these specific target words naturally: ${wordsList}.
 
       DIFFICULTY & VOCABULARY LEVEL REQUIREMENTS:
@@ -181,20 +253,20 @@ export const generateDailyPassiveContext = async (items: VocabularyItem[]): Prom
       CRITICAL FORMATTING:
       - Wrap each of the target words/phrases in <strong> tags in the story (e.g., <strong>expression</strong>).`,
     }));
-    const rawStory = response.text?.trim() || "Failed to generate story.";
+    const rawStory = extractResponseText(response).trim() || "Failed to generate story.";
     return formatStoryHTML(rawStory, items);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini Micro-Story Error:", error);
-    throw new Error("Failed to generate micro-story.");
+    const detail = error?.message || "Failed to generate micro-story.";
+    throw new Error(detail);
   }
 };
 
 export const generateSpeech = async (text: string): Promise<string | undefined> => {
   try {
-    // Strip HTML tags for clean TTS
     const plainText = text.replace(/<[^>]*>/g, '');
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-preview-tts",
+    const response = await callWithRetry((model) => ai.models.generateContent({
+      model,
       contents: [{ parts: [{ text: plainText }] }],
       config: {
         responseModalities: [Modality.AUDIO],
@@ -204,7 +276,7 @@ export const generateSpeech = async (text: string): Promise<string | undefined> 
           },
         },
       },
-    });
+    }), ['gemini-2.5-flash-preview-tts'], 2, 1000);
 
     return response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
   } catch (error) {
@@ -227,8 +299,8 @@ export const playBrowserSpeech = (text: string) => {
 
 export const evaluateSentence = async (wordOrPhrase: string, sentence: string) => {
   try {
-    const response = await callWithRetry(() => ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+    const response = await callWithRetry((model) => ai.models.generateContent({
+      model,
       contents: `Evaluate the user's sentence for the proper usage of the expression "${wordOrPhrase}".
       User's sentence: "${sentence}"
       Return a JSON object with:
@@ -248,9 +320,11 @@ export const evaluateSentence = async (wordOrPhrase: string, sentence: string) =
       }
     }));
 
-    return JSON.parse(response.text || '{}');
-  } catch (error) {
+    const text = extractResponseText(response);
+    return cleanAndParseJSON(text);
+  } catch (error: any) {
     console.error("Gemini Evaluate Sentence Error:", error);
-    throw new Error("Failed to evaluate sentence.");
+    const detail = error?.message || "Failed to evaluate sentence.";
+    throw new Error(detail);
   }
 };
