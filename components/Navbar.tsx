@@ -33,22 +33,22 @@ const Navbar: React.FC<NavbarProps> = ({ currentPage, onNavigate }) => {
               key={item.page}
               onClick={() => onNavigate(item.page)}
               className={`
-                flex flex-col items-center justify-center p-2 transition-all duration-200 relative group rounded-lg
+                flex flex-col items-center justify-center p-2 transition-all duration-150 relative group rounded-xl active:scale-95 cursor-pointer
                 md:w-full md:p-3
-                ${isActive ? 'text-indigo-600' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}
+                ${isActive ? 'text-indigo-600 font-semibold bg-indigo-50/70 shadow-xs' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100/70'}
               `}
             >
-              <item.icon className={`w-6 h-6 mb-1 ${isActive ? 'stroke-[2.5px]' : ''}`} />
+              <item.icon className={`w-6 h-6 mb-1 transition-transform duration-200 group-hover:scale-110 ${isActive ? 'stroke-[2.5px] text-indigo-600' : ''}`} />
               <span className="text-[10px] font-medium">{item.label}</span>
 
               {/* Desktop Active Indicator */}
               {isActive && (
-                <div className="hidden md:block absolute right-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-indigo-600 rounded-l-full" />
+                <div className="hidden md:block absolute right-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-indigo-600 rounded-l-full animate-in fade-in duration-200" />
               )}
 
               {/* Mobile Active Indicator */}
               {isActive && (
-                <div className="md:hidden absolute top-0 w-8 h-1 bg-indigo-600 rounded-b-full" />
+                <div className="md:hidden absolute top-0 w-8 h-1 bg-indigo-600 rounded-b-full animate-in fade-in duration-200" />
               )}
             </button>
           );

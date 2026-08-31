@@ -75,9 +75,9 @@ const App: React.FC = () => {
     setStats(currentStats);
   };
 
-  const handleNavigate = async (page: Page) => {
-    await refreshData();
+  const handleNavigate = (page: Page) => {
     setCurrentPage(page);
+    refreshData().catch((err) => console.error('Error refreshing data on navigation:', err));
   };
 
   const handleLogout = async () => {
@@ -100,33 +100,43 @@ const App: React.FC = () => {
     switch (currentPage) {
       case Page.DASHBOARD:
         return (
-          <Dashboard
-            stats={stats}
-            onReviewStart={() => handleNavigate(Page.REVIEW)}
-            items={items}
-            userId={session?.user?.id}
-            onUpdate={() => refreshData()}
-          />
+          <div key="dashboard" className="animate-in fade-in duration-200 h-full">
+            <Dashboard
+              stats={stats}
+              onReviewStart={() => handleNavigate(Page.REVIEW)}
+              items={items}
+              userId={session?.user?.id}
+              onUpdate={() => refreshData()}
+            />
+          </div>
         );
       case Page.CAPTURE:
         return (
-          <Capture
-            items={items}
-            onUpdate={() => refreshData()}
-            userId={session.user.id}
-          />
+          <div key="capture" className="animate-in fade-in duration-200 h-full">
+            <Capture
+              items={items}
+              onUpdate={() => refreshData()}
+              userId={session.user.id}
+            />
+          </div>
         );
       case Page.REVIEW:
-        return <ReviewSession onComplete={() => handleNavigate(Page.DASHBOARD)} userId={session.user.id} />;
+        return (
+          <div key="review" className="animate-in fade-in duration-200 h-full">
+            <ReviewSession items={items} onComplete={() => handleNavigate(Page.DASHBOARD)} userId={session.user.id} />
+          </div>
+        );
       default:
         return (
-          <Dashboard
-            stats={stats}
-            onReviewStart={() => handleNavigate(Page.REVIEW)}
-            items={items}
-            userId={session?.user?.id}
-            onUpdate={() => refreshData()}
-          />
+          <div key="dashboard-default" className="animate-in fade-in duration-200 h-full">
+            <Dashboard
+              stats={stats}
+              onReviewStart={() => handleNavigate(Page.REVIEW)}
+              items={items}
+              userId={session?.user?.id}
+              onUpdate={() => refreshData()}
+            />
+          </div>
         );
     }
   };

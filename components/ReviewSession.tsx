@@ -8,6 +8,7 @@ import { PartyPopper, Lightbulb, Zap, Eye, Sparkles, Check, HelpCircle, Loader2,
 interface ReviewSessionProps {
   onComplete: () => void;
   userId: string;
+  items?: VocabularyItem[];
 }
 
 const calculatePassiveBatches = (items: VocabularyItem[]): VocabularyItem[][] => {
@@ -32,7 +33,7 @@ const calculatePassiveBatches = (items: VocabularyItem[]): VocabularyItem[][] =>
   return batches;
 };
 
-const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => {
+const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId, items }) => {
   const [activeQueue, setActiveQueue] = useState<VocabularyItem[]>([]);
   const [passiveQueue, setPassiveQueue] = useState<VocabularyItem[]>([]);
   
@@ -287,7 +288,7 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId }) => 
 
   useEffect(() => {
     const fetchDue = async () => {
-      const allItems = await storage.getItems(userId);
+      const allItems = (items && items.length > 0) ? items : await storage.getItems(userId);
       const dueItems = allItems.filter(item => item.nextReviewDate <= Date.now());
       
       const active = dueItems.filter(item => item.type === 'ACTIVE');

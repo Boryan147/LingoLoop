@@ -326,20 +326,22 @@ const Capture: React.FC<CaptureProps> = ({ items, onUpdate, userId }) => {
     clearDraft();
   };
 
-  const handleToggleType = async (item: VocabularyItem) => {
+  const handleToggleType = (item: VocabularyItem) => {
     try {
-      await storage.toggleVocabularyType(item.id, item.type, userId);
-      onUpdate();
+      storage.toggleVocabularyType(item.id, item.type, userId)
+        .then(() => onUpdate())
+        .catch((err) => console.error('Failed to toggle vocabulary type:', err));
     } catch (err) {
       alert('Failed to toggle vocabulary type.');
     }
   };
 
-  const handleDelete = async (itemId: string) => {
+  const handleDelete = (itemId: string) => {
     if (!window.confirm('Are you sure you want to delete this item? This cannot be undone.')) return;
     try {
-      await storage.deleteItem(itemId, userId);
-      onUpdate();
+      storage.deleteItem(itemId, userId)
+        .then(() => onUpdate())
+        .catch((err) => console.error('Failed to delete item:', err));
     } catch (err) {
       alert('Failed to delete vocabulary item.');
     }
