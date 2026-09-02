@@ -54,6 +54,7 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId, items
     return val ? parseInt(val, 10) : 0;
   });
   const [isActiveFlipped, setIsActiveFlipped] = useState(false);
+  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
   const [sentenceInput, setSentenceInput] = useState('');
   const [sentenceEvaluating, setSentenceEvaluating] = useState(false);
   const [sentenceFeedback, setSentenceFeedback] = useState<{ isCorrect: boolean, feedback: string } | null>(null);
@@ -400,22 +401,33 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId, items
     }
   }, [phase, currentBatchIndex, passiveBatches]);
 
-  const handleActiveRating = async (rating: number) => {
+  const handleActiveRating = (rating: number) => {
+    if (isSubmittingRating || activeIndex >= activeQueue.length) return;
+    setIsSubmittingRating(true);
+
     const currentItem = activeQueue[activeIndex];
     const updates = calculateNextReview(currentItem, rating);
     const updatedItem = { ...currentItem, ...updates, updatedAt: Date.now() } as VocabularyItem;
-    await storage.updateItem(updatedItem, userId);
+
+    // Asynchronously save to storage in background
+    storage.updateItem(updatedItem, userId).catch((err) => {
+      console.error("Failed to save item rating:", err);
+    });
 
     if (activeIndex < activeQueue.length - 1) {
       setIsActiveFlipped(false);
       setSentenceInput('');
       setSentenceFeedback(null);
       setSentenceError(null);
-      setTimeout(() => setActiveIndex(prev => prev + 1), 150);
+      setActiveIndex(prev => prev + 1);
+      setTimeout(() => {
+        setIsSubmittingRating(false);
+      }, 200);
     } else {
       // Finished ACTIVE phase
       sessionStorage.removeItem('lingoloop_review_active_index');
       setActiveQueue([]);
+      setIsSubmittingRating(false);
       if (passiveBatches.length > 0) {
         setPhase('SELECT');
         sessionStorage.setItem('lingoloop_review_phase', 'SELECT');
@@ -726,19 +738,19 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId, items
               <div className={`transition-all duration-300 shrink-0 ${isActiveFlipped ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
                 <p className="text-center text-slate-400 text-xs mb-3 font-medium">How difficult was it to recall?</p>
                 <div className="grid grid-cols-4 gap-2.5">
-                  <button onClick={() => handleActiveRating(1)} className="flex flex-col items-center p-2.5 rounded-2xl bg-white border-b-2 border-slate-200 hover:bg-red-50 active:scale-90 transition-all duration-100 shadow-sm hover:shadow-md cursor-pointer select-none">
+                  <button onClick={() => handleActiveRating(1)} disabled={isSubmittingRating} className="flex flex-col items-center p-2.5 rounded-2xl bg-white border-b-2 border-slate-200 hover:bg-red-50 active:scale-90 transition-all duration-100 shadow-sm hover:shadow-md cursor-pointer select-none disabled:opacity-50 disabled:pointer-events-none">
                     <span className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center text-red-600 font-bold text-sm">1</span>
                     <span className="text-[10px] font-bold text-slate-500 uppercase mt-1">Forgot</span>
                   </button>
-                  <button onClick={() => handleActiveRating(2)} className="flex flex-col items-center p-2.5 rounded-2xl bg-white border-b-2 border-slate-200 hover:bg-orange-50 active:scale-90 transition-all duration-100 shadow-sm hover:shadow-md cursor-pointer select-none">
+                  <button onClick={() => handleActiveRating(2)} disabled={isSubmittingRating} className="flex flex-col items-center p-2.5 rounded-2xl bg-white border-b-2 border-slate-200 hover:bg-orange-50 active:scale-90 transition-all duration-100 shadow-sm hover:shadow-md cursor-pointer select-none disabled:opacity-50 disabled:pointer-events-none">
                     <span className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 font-bold text-sm">2</span>
                     <span className="text-[10px] font-bold text-slate-500 uppercase mt-1">Hard</span>
                   </button>
-                  <button onClick={() => handleActiveRating(3)} className="flex flex-col items-center p-2.5 rounded-2xl bg-white border-b-2 border-slate-200 hover:bg-blue-50 active:scale-90 transition-all duration-100 shadow-sm hover:shadow-md cursor-pointer select-none">
+                  <button onClick={() => handleActiveRating(3)} disabled={isSubmittingRating} className="flex flex-col items-center p-2.5 rounded-2xl bg-white border-b-2 border-slate-200 hover:bg-blue-50 active:scale-90 transition-all duration-100 shadow-sm hover:shadow-md cursor-pointer select-none disabled:opacity-50 disabled:pointer-events-none">
                     <span className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm">3</span>
                     <span className="text-[10px] font-bold text-slate-500 uppercase mt-1">Good</span>
                   </button>
-                  <button onClick={() => handleActiveRating(4)} className="flex flex-col items-center p-2.5 rounded-2xl bg-white border-b-2 border-slate-200 hover:bg-green-50 active:scale-90 transition-all duration-100 shadow-sm hover:shadow-md cursor-pointer select-none">
+                  <button onClick={() => handleActiveRating(4)} disabled={isSubmittingRating} className="flex flex-col items-center p-2.5 rounded-2xl bg-white border-b-2 border-slate-200 hover:bg-green-50 active:scale-90 transition-all duration-100 shadow-sm hover:shadow-md cursor-pointer select-none disabled:opacity-50 disabled:pointer-events-none">
                     <span className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600 font-bold text-sm">4</span>
                     <span className="text-[10px] font-bold text-slate-500 uppercase mt-1">Easy</span>
                   </button>

@@ -303,9 +303,12 @@ export const evaluateSentence = async (wordOrPhrase: string, sentence: string) =
       model,
       contents: `Evaluate the user's sentence for the proper usage of the expression "${wordOrPhrase}".
       User's sentence: "${sentence}"
-      Return a JSON object with:
-      1. "isCorrect": boolean (true if the expression is used correctly and the sentence is grammatically correct).
-      2. "feedback": string (A brief explanation of why it's right or wrong. If wrong, provide a corrected version of their sentence).
+
+      EVALUATION RULES:
+      1. FOCUS EXCLUSIVELY ON MEANING & USAGE: Check if the user understands and uses "${wordOrPhrase}" properly and meaningfully in context.
+      2. DO NOT BE STRICT WITH MINOR SURFACE ERRORS: Ignore minor mechanics like missing initial capital letters, missing commas or periods, or small typos that do not change the core meaning.
+      3. "isCorrect": boolean (true if "${wordOrPhrase}" is used appropriately in context, even if there are minor capitalization or punctuation slips).
+      4. "feedback": string (A brief, encouraging explanation focused on word usage. Under 30 words).
       `,
       config: {
         responseMimeType: "application/json",
