@@ -278,13 +278,31 @@ export const formatStoryHTML = (
   return processed;
 };
 
+const STORY_STYLES = [
+  "Detective & Mystery Investigation (an intriguing noir mystery, detective investigation, or agent debriefing)",
+  "Sci-Fi & Cyberpunk World (a futuristic discovery, space station encounter, or AI technology breakthrough)",
+  "Workplace Drama & Startup Pitch (a fast-paced team debate, office negotiation, or product demo launch)",
+  "Fantasy Expedition & Archeology (exploring ancient temple ruins, unearthing forgotten artifacts, or legendary quests)",
+  "Podcast & Live Broadcast Interview (an energetic podcast host interviewing an expert guest on an intriguing topic)",
+  "Travel Memoir & Culinary Adventure (exploring vibrant street markets, overseas backpacking, or food tasting)",
+  "Humorous & Satirical Comedy (a funny misunderstanding, eccentric characters, or an absurd everyday dilemma)",
+  "Late-Night Philosophical Discussion (two close friends sharing deep reflections at a quiet midnight diner)",
+  "Documentary & Nature Exploration (a gripping documentary narrator describing wildlife survival or environmental discoveries)"
+];
+
 export const generateDailyPassiveContext = async (items: VocabularyItem[]): Promise<string> => {
   try {
     const formattedList = items.map((item, idx) => `${idx + 1}. "${item.word_or_phrase}"`).join('\n');
-    const targetWordCount = Math.max(80, items.length * 25);
+    const targetWordCount = Math.max(90, items.length * 25);
+    const selectedStyle = STORY_STYLES[Math.floor(Math.random() * STORY_STYLES.length)];
+
     const response = await callWithRetry((model) => ai.models.generateContent({
       model,
-      contents: `Write an engaging, cohesive micro-story or dialogue (around ${targetWordCount} words) incorporating the target words/phrases listed below.
+      contents: `Write an engaging, creative micro-story or dialogue (around ${targetWordCount} words) incorporating the target words/phrases listed below.
+
+NARRATIVE GENRE & STYLE:
+- Genre: ${selectedStyle}
+- Make the tone, atmosphere, and dialogue fit this specific genre to create a fresh and immersive reading experience!
 
 TARGET WORDS/PHRASES TO INCLUDE (${items.length} items):
 ${formattedList}
