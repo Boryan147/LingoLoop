@@ -15,13 +15,8 @@ const calculatePassiveBatches = (items: VocabularyItem[]): VocabularyItem[][] =>
   const total = items.length;
   if (total === 0) return [];
   
-  // Dynamic batch sizing based on total passive queue size
-  let maxPerBatch = 5;
-  if (total > 30) maxPerBatch = 15;
-  else if (total > 20) maxPerBatch = 12;
-  else if (total > 10) maxPerBatch = 8;
-  else if (total > 5) maxPerBatch = 6;
-  else maxPerBatch = Math.max(1, total);
+  // Dynamic batch sizing tuned for optimal passive review (max 4-5 items per batch)
+  const maxPerBatch = total <= 5 ? total : 4;
 
   const numBatches = Math.ceil(total / maxPerBatch);
   const itemsPerBatch = Math.ceil(total / numBatches);

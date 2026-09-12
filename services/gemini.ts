@@ -193,7 +193,7 @@ export const generateIntakeAI = async (
 
 export const formatStoryHTML = (
   rawStory: string,
-  targetItems: { word_or_phrase: string }[] = []
+  targetItems: { word_or_phrase: string; definition?: string; context_hint?: string }[] = []
 ): string => {
   if (!rawStory) return '';
 
@@ -224,13 +224,55 @@ export const formatStoryHTML = (
           if (/<strong/i.test(part)) insideStrong = true;
           if (/<\/strong>/i.test(part)) insideStrong = false;
         } else if (!insideStrong && part.trim().length > 0) {
-          const regex = new RegExp(`\\b(${escaped})\\b`, 'gi');
-          parts[i] = part.replace(regex, '<strong>$1</strong>');
+          // First try exact phrase match
+          const exactRegex = new RegExp(`\\b(${escaped})\\b`, 'gi');
+          if (exactRegex.test(part)) {
+            parts[i] = part.replace(exactRegex, '<strong>$1</strong>');
+          } else if (!phrase.includes(' ') && phrase.length > 3) {
+            // For single words, try inflection stem matching (e.g. analyze -> analyze/analyzed/analyzing)
+            const stem = phrase.replace(/(ing|ed|es|e|s)$/i, '');
+            if (stem.length >= 3) {
+              const stemEscaped = stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const stemRegex = new RegExp(`\\b(${stemEscaped}[a-z]*)\\b`, 'gi');
+              parts[i] = part.replace(stemRegex, '<strong>$1</strong>');
+            }
+          }
         }
       }
 
       processed = parts.join('');
     });
+
+    // 3. Fallback Guarantee: If any target item is completely missing from the generated story, append context note
+    const plainText = processed.replace(/<[^>]*>/g, '').toLowerCase();
+
+    const missingItems = targetItems.filter(item => {
+      const phrase = item.word_or_phrase.trim().toLowerCase();
+      if (!phrase) return false;
+
+      if (plainText.includes(phrase)) return false;
+
+      // Check single word stem match in plain text
+      if (!phrase.includes(' ') && phrase.length > 3) {
+        const stem = phrase.replace(/(ing|ed|es|e|s)$/i, '');
+        if (stem.length >= 3 && plainText.includes(stem)) return false;
+      }
+
+      // For multi-word phrases, check if key words (>=4 chars) are present
+      const words = phrase.split(/\s+/).filter(w => w.length >= 4);
+      if (words.length > 0 && words.every(w => plainText.includes(w))) return false;
+
+      return true;
+    });
+
+    if (missingItems.length > 0) {
+      const fallbackHtml = missingItems.map(item => {
+        const def = item.definition ? item.definition.trim() : 'Definition unavailable';
+        return `<p class="mt-3 text-slate-700 font-sans italic border-l-2 border-indigo-400 pl-3">Context note: In practice, <strong>${item.word_or_phrase}</strong> means "${def}".</p>`;
+      }).join('');
+
+      processed += fallbackHtml;
+    }
   }
 
   return processed;
@@ -238,20 +280,22 @@ export const formatStoryHTML = (
 
 export const generateDailyPassiveContext = async (items: VocabularyItem[]): Promise<string> => {
   try {
-    const wordsList = items.map(item => item.word_or_phrase).join(', ');
-    const targetWordCount = Math.max(80, items.length * 20);
+    const formattedList = items.map((item, idx) => `${idx + 1}. "${item.word_or_phrase}"`).join('\n');
+    const targetWordCount = Math.max(80, items.length * 25);
     const response = await callWithRetry((model) => ai.models.generateContent({
       model,
-      contents: `Write an engaging, cohesive micro-story or dialogue (around ${targetWordCount} words) using these specific target words naturally: ${wordsList}.
+      contents: `Write an engaging, cohesive micro-story or dialogue (around ${targetWordCount} words) incorporating the target words/phrases listed below.
 
-      DIFFICULTY & VOCABULARY LEVEL REQUIREMENTS:
-      1. Target Audience Level: TOEFL ~100 points / B2 upper-intermediate English learner level.
-      2. Keep the non-target vocabulary clean, accessible, and high-frequency. Avoid overly archaic, obscure, complex academic, or dense literary phrasing outside of the target words.
-      3. Use clear, standard sentence structures and natural conversational or narrative flow.
-      4. Provide clear surrounding context for each target word so its meaning and usage are easy to follow and comprehend.
+TARGET WORDS/PHRASES TO INCLUDE (${items.length} items):
+${formattedList}
 
-      CRITICAL FORMATTING:
-      - Wrap each of the target words/phrases in <strong> tags in the story (e.g., <strong>expression</strong>).`,
+CRITICAL MANDATES:
+1. STRICT REQUIREMENT: You MUST include EVERY SINGLE ONE of the ${items.length} target items listed above in your story/dialogue. DO NOT skip or omit any target word or phrase under any circumstances.
+2. Every target word/phrase must appear naturally in context, using either its exact form or a natural grammatical form.
+3. Target Audience Level: TOEFL ~100 points / B2 upper-intermediate English learner level.
+4. Keep the non-target vocabulary clean, accessible, and standard. Avoid overly archaic or dense literary phrasing.
+5. Provide clear surrounding context for each target word so its meaning is easily understood.
+6. FORMATTING: Wrap each of the target words/phrases in <strong> tags in the story (e.g., <strong>expression</strong>).`,
     }));
     const rawStory = extractResponseText(response).trim() || "Failed to generate story.";
     return formatStoryHTML(rawStory, items);
