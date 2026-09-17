@@ -258,6 +258,7 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId, items
   const [batchRatings, setBatchRatings] = useState<Record<string, number>>({});
   const [showBatchExamples, setShowBatchExamples] = useState<boolean>(false);
   const [itemExamplesShown, setItemExamplesShown] = useState<Record<string, boolean>>({});
+  const [isSubmittingBatch, setIsSubmittingBatch] = useState(false);
 
   useEffect(() => {
     if (phase !== 'LOADING') {
@@ -441,32 +442,45 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId, items
   };
 
   const submitPassiveBatch = async () => {
-    const batch = passiveBatches[currentBatchIndex];
-    
-    // Save all reviews for the current batch
-    for (const item of batch) {
-      const rating = batchRatings[item.id] || 3; // Default to Good if unrated (safety)
-      const updates = calculateNextReview(item, rating);
-      const updatedItem = { ...item, ...updates, updatedAt: Date.now() } as VocabularyItem;
-      await storage.updateItem(updatedItem, userId);
-    }
+    if (isSubmittingBatch) return;
+    setIsSubmittingBatch(true);
 
-    if (currentBatchIndex < passiveBatches.length - 1) {
-      sessionStorage.removeItem('lingoloop_review_story');
-      setCurrentStory('');
-      setCurrentBatchIndex(prev => prev + 1);
-    } else {
-      sessionStorage.removeItem('lingoloop_review_story');
-      sessionStorage.removeItem('lingoloop_review_story_item_ids');
-      sessionStorage.removeItem('lingoloop_review_batch_index');
-      setPassiveBatches([]);
-      if (activeQueue.length > 0) {
-        setPhase('SELECT');
-        sessionStorage.setItem('lingoloop_review_phase', 'SELECT');
-      } else {
-        clearReviewSessionStorage();
-        setPhase('COMPLETE');
+    try {
+      const batch = passiveBatches[currentBatchIndex];
+      
+      if (batch && batch.length > 0) {
+        // Save all reviews for the current batch concurrently
+        await Promise.all(
+          batch.map(item => {
+            const rating = batchRatings[item.id] || 3; // Default to Good if unrated (safety)
+            const updates = calculateNextReview(item, rating);
+            const updatedItem = { ...item, ...updates, updatedAt: Date.now() } as VocabularyItem;
+            return storage.updateItem(updatedItem, userId);
+          })
+        );
       }
+
+      if (currentBatchIndex < passiveBatches.length - 1) {
+        sessionStorage.removeItem('lingoloop_review_story');
+        setCurrentStory('');
+        setCurrentBatchIndex(prev => prev + 1);
+      } else {
+        sessionStorage.removeItem('lingoloop_review_story');
+        sessionStorage.removeItem('lingoloop_review_story_item_ids');
+        sessionStorage.removeItem('lingoloop_review_batch_index');
+        setPassiveBatches([]);
+        if (activeQueue.length > 0) {
+          setPhase('SELECT');
+          sessionStorage.setItem('lingoloop_review_phase', 'SELECT');
+        } else {
+          clearReviewSessionStorage();
+          setPhase('COMPLETE');
+        }
+      }
+    } catch (err) {
+      console.error("Failed to submit passive batch:", err);
+    } finally {
+      setIsSubmittingBatch(false);
     }
   };
 
@@ -991,12 +1005,21 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId, items
                 <button
                   onClick={submitPassiveBatch}
                   disabled={
+                    isSubmittingBatch ||
                     isGeneratingStory || 
                     passiveBatches[currentBatchIndex]?.some(item => batchRatings[item.id] === undefined)
                   }
-                  className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-100"
+                  className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-100 cursor-pointer disabled:cursor-not-allowed"
                 >
-                  <Check className="w-5 h-5" /> Submit Batch reviews
+                  {isSubmittingBatch ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" /> Submitting batch reviews...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-5 h-5" /> Submit Batch reviews
+                    </>
+                  )}
                 </button>
                 {passiveBatches[currentBatchIndex]?.some(item => batchRatings[item.id] === undefined) && (
                   <p className="text-center text-xs text-slate-400 mt-2 font-medium">Please reveal and rate all items in the batch to continue.</p>
