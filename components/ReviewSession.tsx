@@ -3,7 +3,7 @@ import { VocabularyItem } from '../types';
 import { calculateNextReview, getInitialSRSState } from '../services/srs';
 import { generateDailyPassiveContext, evaluateSentence, generateIntakeAI, formatStoryHTML } from '../services/gemini';
 import * as storage from '../services/storage';
-import { PartyPopper, Lightbulb, Zap, Eye, Sparkles, Check, HelpCircle, Loader2, ExternalLink, X, AlertCircle, CheckCircle2, Plus, RefreshCw } from 'lucide-react';
+import { PartyPopper, Lightbulb, Zap, Eye, Sparkles, Check, HelpCircle, Loader2, ExternalLink, X, AlertCircle, CheckCircle2, Plus, RefreshCw, BookOpen } from 'lucide-react';
 
 interface ReviewSessionProps {
   onComplete: () => void;
@@ -256,6 +256,8 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId, items
   // Batch states
   const [revealedIds, setRevealedIds] = useState<Record<string, boolean>>({});
   const [batchRatings, setBatchRatings] = useState<Record<string, number>>({});
+  const [showBatchExamples, setShowBatchExamples] = useState<boolean>(false);
+  const [itemExamplesShown, setItemExamplesShown] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (phase !== 'LOADING') {
@@ -368,6 +370,7 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId, items
     setCurrentStory('');
     setRevealedIds({});
     setBatchRatings({});
+    setItemExamplesShown({});
     
     try {
       const batch = passiveBatches[currentBatchIndex];
@@ -829,10 +832,33 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId, items
 
               {/* Items breakdown & ratings */}
               <div className="space-y-4">
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Test Vocabulary Recall</h4>
+                <div className="flex flex-wrap justify-between items-center gap-2">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Test Vocabulary Recall</h4>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextState = !showBatchExamples;
+                      setShowBatchExamples(nextState);
+                      const updated: Record<string, boolean> = {};
+                      passiveBatches[currentBatchIndex]?.forEach(item => {
+                        updated[item.id] = nextState;
+                      });
+                      setItemExamplesShown(updated);
+                    }}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer active:scale-95 shadow-sm ${
+                      showBatchExamples
+                        ? 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-slate-800'
+                    }`}
+                  >
+                    <BookOpen className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>{showBatchExamples ? 'Hide Example Sentences' : 'Check Example Sentences'}</span>
+                  </button>
+                </div>
                 {passiveBatches[currentBatchIndex]?.map((item) => {
                   const isRevealed = !!revealedIds[item.id];
                   const currentRating = batchRatings[item.id];
+                  const isExamplesVisible = itemExamplesShown[item.id] !== undefined ? itemExamplesShown[item.id] : showBatchExamples;
                   return (
                     <div 
                       key={item.id}
@@ -864,6 +890,43 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId, items
                               <span>Shadow on YouGlish</span>
                             </a>
                           </div>
+
+                          {/* Example Sentences Block */}
+                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80 animate-in fade-in space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide flex items-center gap-1">
+                                <BookOpen className="w-3 h-3 text-indigo-500" />
+                                Example Sentences
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setItemExamplesShown(prev => ({
+                                    ...prev,
+                                    [item.id]: !isExamplesVisible
+                                  }));
+                                }}
+                                className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer"
+                              >
+                                {isExamplesVisible ? 'Hide' : 'Check Examples'}
+                              </button>
+                            </div>
+
+                            {isExamplesVisible && (
+                              <div className="pt-1">
+                                {item.examples && item.examples.length > 0 ? (
+                                  <ul className="list-disc pl-4 space-y-1 text-xs text-slate-700 leading-relaxed font-medium">
+                                    {item.examples.map((ex, i) => (
+                                      <li key={i}>{ex}</li>
+                                    ))}
+                                  </ul>
+                                ) : (
+                                  <p className="text-xs text-slate-400 italic">No example sentences available for this item.</p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
                           {item.context_hint && (
                             <div className="bg-slate-50 p-2.5 rounded-lg text-xs text-slate-500">
                               <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide mb-0.5">Original context</span>
