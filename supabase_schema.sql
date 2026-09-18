@@ -26,7 +26,7 @@ CREATE TABLE vocabulary (
   
   -- SRS Data (Ebbinghaus / SM-2)
   next_review_date BIGINT NOT NULL,
-  interval INTEGER NOT NULL DEFAULT 0,
+  interval DOUBLE PRECISION NOT NULL DEFAULT 0,
   repetitions INTEGER NOT NULL DEFAULT 0,
   ease_factor DOUBLE PRECISION NOT NULL DEFAULT 2.5,
   

@@ -27,7 +27,7 @@ const mapToSupabase = (item: VocabularyItem) => ({
   word_family: item.word_family || [],
   status: item.status,
   next_review_date: item.nextReviewDate,
-  interval: item.interval,
+  interval: Math.round((item.interval || 0) * 100) / 100,
   repetitions: item.repetitions,
   ease_factor: item.easeFactor,
   created_at: item.createdAt,
