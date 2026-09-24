@@ -259,6 +259,20 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId, items
   const [showBatchExamples, setShowBatchExamples] = useState<boolean>(false);
   const [itemExamplesShown, setItemExamplesShown] = useState<Record<string, boolean>>({});
   const [isSubmittingBatch, setIsSubmittingBatch] = useState(false);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (phase === 'PASSIVE' && passiveBatches.length > 0 && currentBatchIndex < passiveBatches.length) {
+      const batch = passiveBatches[currentBatchIndex];
+      if (batch && batch.length > 0) {
+        setSelectedItemId(prev => {
+          if (prev && batch.some(i => i.id === prev)) return prev;
+          const firstUnrated = batch.find(i => batchRatings[i.id] === undefined);
+          return firstUnrated ? firstUnrated.id : batch[0].id;
+        });
+      }
+    }
+  }, [phase, currentBatchIndex, passiveBatches]);
 
   useEffect(() => {
     if (phase !== 'LOADING') {
@@ -438,7 +452,43 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId, items
   };
 
   const handleRateBatchItem = (itemId: string, rating: number) => {
-    setBatchRatings(prev => ({ ...prev, [itemId]: rating }));
+    setBatchRatings(prev => {
+      const nextRatings = { ...prev, [itemId]: rating };
+      // Auto-advance to next unrated item in current batch if available
+      const batch = passiveBatches[currentBatchIndex];
+      if (batch) {
+        const nextUnrated = batch.find(i => i.id !== itemId && nextRatings[i.id] === undefined);
+        if (nextUnrated) {
+          setSelectedItemId(nextUnrated.id);
+          setRevealedIds(r => ({ ...r, [nextUnrated.id]: true }));
+        }
+      }
+      return nextRatings;
+    });
+  };
+
+  const handleStoryClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    const wordEl = target.closest('[data-item-id]') || target.closest('strong') || target.closest('b');
+    if (wordEl) {
+      const itemId = wordEl.getAttribute('data-item-id');
+      const rawPhrase = wordEl.getAttribute('data-word-phrase');
+      const itemPhrase = rawPhrase ? decodeURIComponent(rawPhrase) : wordEl.textContent?.trim();
+
+      const batch = passiveBatches[currentBatchIndex];
+      if (batch && batch.length > 0) {
+        const match = batch.find(i => 
+          (itemId && i.id === itemId) || 
+          (itemPhrase && i.word_or_phrase.toLowerCase() === itemPhrase.toLowerCase()) ||
+          (itemPhrase && i.word_or_phrase.toLowerCase().includes(itemPhrase.toLowerCase())) ||
+          (itemPhrase && itemPhrase.toLowerCase().includes(i.word_or_phrase.toLowerCase()))
+        );
+        if (match) {
+          setSelectedItemId(match.id);
+          setRevealedIds(prev => ({ ...prev, [match.id]: true }));
+        }
+      }
+    }
   };
 
   const submitPassiveBatch = async () => {
@@ -595,7 +645,7 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId, items
   return (
     <div className="w-full bg-slate-50">
       <div className="min-h-full flex flex-col items-center p-4 md:p-6 pb-24 md:pb-6">
-        <div className="w-full max-w-2xl flex flex-col flex-1">
+        <div className={`w-full flex flex-col flex-1 transition-all duration-300 ${phase === 'PASSIVE' ? 'max-w-6xl' : 'max-w-2xl'}`}>
           
           {/* Header */}
           <div className="flex justify-between items-center text-xs font-bold text-slate-400 mb-4 uppercase tracking-wider shrink-0">
@@ -772,141 +822,197 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId, items
           )}
 
           {/* PASSIVE micro-story reviews */}
-          {phase === 'PASSIVE' && (
-            <div className="space-y-6">
-              {/* Story Card */}
-              <div 
-                className="bg-white p-6 rounded-3xl shadow-xl border border-slate-200/80 relative overflow-hidden"
-                onMouseUp={handleTextSelection}
-                onTouchEnd={handleTextSelection}
-              >
-                <div className="absolute top-0 right-0 p-4 flex items-center gap-1.5 text-xs text-indigo-500 font-semibold bg-indigo-50/60 rounded-bl-2xl">
-                  <Sparkles className="w-3.5 h-3.5" /> AI Story Context
+          {phase === 'PASSIVE' && (() => {
+            const currentBatch = passiveBatches[currentBatchIndex] || [];
+            const selectedItem = currentBatch.find(i => i.id === selectedItemId) || currentBatch[0];
+            const isSelectedRevealed = selectedItem ? !!revealedIds[selectedItem.id] : false;
+            const isSelectedExamplesVisible = selectedItem 
+              ? (itemExamplesShown[selectedItem.id] !== undefined ? itemExamplesShown[selectedItem.id] : showBatchExamples) 
+              : false;
+
+            return (
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                
+                {/* LEFT COLUMN: Generated Story (7 cols on lg screens) */}
+                <div className="lg:col-span-7 space-y-4">
+                  <div 
+                    className="bg-white p-6 md:p-7 rounded-3xl shadow-xl border border-slate-200/80 relative overflow-hidden"
+                    onMouseUp={handleTextSelection}
+                    onTouchEnd={handleTextSelection}
+                    onClick={handleStoryClick}
+                  >
+                    <div className="absolute top-0 right-0 p-3.5 flex items-center gap-1.5 text-xs text-indigo-600 font-bold bg-indigo-50/80 rounded-bl-2xl border-l border-b border-indigo-100">
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-500 fill-current" /> AI Story Context
+                    </div>
+
+                    <div className="mb-4">
+                      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Interactive Story Context</h3>
+                      <p className="text-xs text-slate-500 font-medium">
+                        Click any highlighted word in the story to check its meaning & rate recall on the side panel.
+                      </p>
+                    </div>
+
+                    {isGeneratingStory ? (
+                      <div className="py-16 flex flex-col items-center justify-center text-slate-400 gap-2">
+                        <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+                        <span className="text-sm font-medium">Generating story context...</span>
+                      </div>
+                    ) : storyError ? (
+                      <div className="py-8 flex flex-col items-center justify-center text-center gap-3">
+                        <div className="p-3 bg-red-50 text-red-500 rounded-full">
+                          <AlertCircle className="w-6 h-6" />
+                        </div>
+                        <div className="space-y-1 max-w-md">
+                          <p className="text-sm font-bold text-slate-800">Story Generation Failed</p>
+                          <p className="text-xs text-slate-500">{storyError}</p>
+                        </div>
+                        <button
+                          onClick={loadBatchStory}
+                          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer mt-1"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          <span>Retry Story Generation</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <p 
+                          className="text-base md:text-lg text-slate-800 leading-relaxed font-sans mb-6 font-medium story-text select-text"
+                          dangerouslySetInnerHTML={{ 
+                            __html: formatStoryHTML(currentStory, currentBatch, selectedItem?.id) || "No story context generated." 
+                          }}
+                        />
+                        
+                        {/* Capture word button */}
+                        <div className="flex justify-end pt-2 border-t border-slate-100">
+                          <button
+                            onClick={() => openCaptureModal(selectedText)}
+                            className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 active:bg-indigo-150 text-indigo-700 rounded-xl text-xs font-bold transition-all border border-indigo-100 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs hover:scale-[1.02] shrink-0"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>{selectedText ? `Capture "${selectedText}"` : 'Capture Word from Story'}</span>
+                          </button>
+                        </div>
+
+                        {selectedText && (
+                          <div className="mt-3 pt-3 border-t border-slate-100 flex justify-between items-center text-xs animate-in fade-in duration-200">
+                            <span className="text-slate-500 font-medium">Selected text: <strong className="text-slate-800 font-semibold">"{selectedText}"</strong></span>
+                            <button
+                              onClick={() => {
+                                if (typeof window !== 'undefined') window.getSelection()?.removeAllRanges();
+                                setSelectedText('');
+                              }}
+                              className="text-slate-400 hover:text-slate-600 font-bold"
+                            >
+                              Clear
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
-                
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 block">Reading & Listening Practice</h3>
-                
-                {isGeneratingStory ? (
-                  <div className="py-12 flex flex-col items-center justify-center text-slate-400 gap-2">
-                    <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
-                    <span className="text-sm font-medium">Generating story context...</span>
-                  </div>
-                ) : storyError ? (
-                  <div className="py-8 flex flex-col items-center justify-center text-center gap-3">
-                    <div className="p-3 bg-red-50 text-red-500 rounded-full">
-                      <AlertCircle className="w-6 h-6" />
-                    </div>
-                    <div className="space-y-1 max-w-md">
-                      <p className="text-sm font-bold text-slate-800">Story Generation Failed</p>
-                      <p className="text-xs text-slate-500">{storyError}</p>
-                    </div>
-                    <button
-                      onClick={loadBatchStory}
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer mt-1"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5" />
-                      <span>Retry Story Generation</span>
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <p 
-                      className="text-lg text-slate-800 leading-relaxed font-sans mb-6 font-medium story-text"
-                      dangerouslySetInnerHTML={{ __html: formatStoryHTML(currentStory, passiveBatches[currentBatchIndex]) || "No story context generated." }}
-                    />
-                    
-                    {/* Capture word button */}
-                    <div className="flex justify-end">
+
+                {/* RIGHT COLUMN: Side Panel for Selected Word & Recall Ratings (5 cols on lg screens, sticky top) */}
+                <div className="lg:col-span-5 space-y-4 lg:sticky lg:top-6">
+                  
+                  {/* Batch Words Selector Chips */}
+                  <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Batch Vocabulary ({currentBatch.length})</span>
                       <button
-                        onClick={() => openCaptureModal(selectedText)}
-                        className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 active:bg-indigo-150 text-indigo-700 rounded-xl text-xs font-bold transition-all border border-indigo-100/50 flex items-center justify-center gap-1.5 cursor-pointer shadow-sm hover:scale-[1.02] shrink-0"
+                        type="button"
+                        onClick={() => {
+                          const nextState = !showBatchExamples;
+                          setShowBatchExamples(nextState);
+                          const updated: Record<string, boolean> = {};
+                          currentBatch.forEach(item => {
+                            updated[item.id] = nextState;
+                          });
+                          setItemExamplesShown(updated);
+                        }}
+                        className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
                       >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>{selectedText ? `Capture "${selectedText}"` : 'Capture Word from Story'}</span>
+                        <BookOpen className="w-3 h-3 text-indigo-500" />
+                        <span>{showBatchExamples ? 'Hide Examples' : 'Check Examples'}</span>
                       </button>
                     </div>
 
-                    {selectedText && (
-                      <div className="mt-3 pt-3 border-t border-slate-100 flex justify-between items-center text-xs animate-in fade-in duration-200">
-                        <span className="text-slate-500 font-medium">Selected text: <strong className="text-slate-800 font-semibold">"{selectedText}"</strong></span>
-                        <button
-                          onClick={() => {
-                            if (typeof window !== 'undefined') window.getSelection()?.removeAllRanges();
-                            setSelectedText('');
-                          }}
-                          className="text-slate-400 hover:text-slate-600 font-bold"
-                        >
-                          Clear
-                        </button>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {currentBatch.map((item) => {
+                        const isSelected = selectedItem?.id === item.id;
+                        const rating = batchRatings[item.id];
+                        const isRevealed = !!revealedIds[item.id];
 
-              {/* Items breakdown & ratings */}
-              <div className="space-y-4">
-                <div className="flex flex-wrap justify-between items-center gap-2">
-                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Test Vocabulary Recall</h4>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const nextState = !showBatchExamples;
-                      setShowBatchExamples(nextState);
-                      const updated: Record<string, boolean> = {};
-                      passiveBatches[currentBatchIndex]?.forEach(item => {
-                        updated[item.id] = nextState;
-                      });
-                      setItemExamplesShown(updated);
-                    }}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer active:scale-95 shadow-sm ${
-                      showBatchExamples
-                        ? 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
-                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-slate-800'
-                    }`}
-                  >
-                    <BookOpen className="w-3.5 h-3.5 text-indigo-500" />
-                    <span>{showBatchExamples ? 'Hide Example Sentences' : 'Check Example Sentences'}</span>
-                  </button>
-                </div>
-                {passiveBatches[currentBatchIndex]?.map((item) => {
-                  const isRevealed = !!revealedIds[item.id];
-                  const currentRating = batchRatings[item.id];
-                  const isExamplesVisible = itemExamplesShown[item.id] !== undefined ? itemExamplesShown[item.id] : showBatchExamples;
-                  return (
-                    <div 
-                      key={item.id}
-                      className={`bg-white p-5 rounded-2xl border border-slate-200 hover:border-indigo-150 transition-all ${isRevealed ? 'ring-1 ring-indigo-100 shadow-md' : 'shadow-sm'}`}
-                    >
-                      <div className="flex justify-between items-center mb-2">
-                        <h5 className="font-extrabold text-base text-slate-900">{item.word_or_phrase}</h5>
+                        let badgeStyle = "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100";
+                        if (rating === 1) badgeStyle = "bg-red-50 border-red-200 text-red-700 font-bold";
+                        else if (rating === 2) badgeStyle = "bg-orange-50 border-orange-200 text-orange-700 font-bold";
+                        else if (rating === 3) badgeStyle = "bg-blue-50 border-blue-200 text-blue-700 font-bold";
+                        else if (rating === 4) badgeStyle = "bg-emerald-50 border-emerald-200 text-emerald-700 font-bold";
+                        else if (isRevealed) badgeStyle = "bg-indigo-50 border-indigo-200 text-indigo-700 font-semibold";
+
+                        return (
+                          <button
+                            key={item.id}
+                            onClick={() => {
+                              setSelectedItemId(item.id);
+                              setRevealedIds(prev => ({ ...prev, [item.id]: true }));
+                            }}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1.5 ${badgeStyle} ${isSelected ? 'ring-2 ring-indigo-500 border-indigo-500 shadow-sm scale-102' : 'hover:scale-102'}`}
+                          >
+                            <span>{item.word_or_phrase}</span>
+                            {rating !== undefined ? (
+                              <span className={`w-2 h-2 rounded-full ${rating === 1 ? 'bg-red-500' : rating === 2 ? 'bg-orange-500' : rating === 3 ? 'bg-blue-500' : 'bg-emerald-500'}`} />
+                            ) : isRevealed ? (
+                              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Selected Word Details Card */}
+                  {selectedItem ? (
+                    <div className="bg-white p-5 md:p-6 rounded-3xl border border-slate-200/80 shadow-xl space-y-4 animate-in fade-in duration-200">
+                      <div className="flex justify-between items-start border-b border-slate-100 pb-3">
+                        <div>
+                          <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                            Target Expression
+                          </span>
+                          <h4 className="text-xl font-extrabold text-slate-900 mt-1">{selectedItem.word_or_phrase}</h4>
+                        </div>
                         <button
-                          onClick={() => toggleReveal(item.id)}
-                          className="px-3 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+                          onClick={() => toggleReveal(selectedItem.id)}
+                          className="px-3 py-1 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer"
                         >
-                          {isRevealed ? "Hide Definition" : "Reveal Meaning"}
+                          {isSelectedRevealed ? "Hide Definition" : "Reveal Meaning"}
                         </button>
                       </div>
 
-                      {isRevealed && (
-                        <div className="space-y-3 mt-3 pt-3 border-t border-slate-100 animate-in slide-in-from-top-1 duration-200">
-                          <p className="text-sm text-slate-700 italic border-l-2 border-indigo-500 pl-3 font-semibold">
-                            {item.definition}
-                          </p>
-                          <div className="flex items-center gap-2 mt-1">
+                      {isSelectedRevealed ? (
+                        <div className="space-y-3.5 animate-in slide-in-from-top-1 duration-200">
+                          {/* Definition */}
+                          <div className="bg-indigo-50/50 p-3.5 rounded-2xl border border-indigo-100/80">
+                            <span className="text-[9px] font-bold text-indigo-600 uppercase tracking-wider block mb-1">Nuance / Definition</span>
+                            <p className="text-sm font-semibold text-slate-800 leading-normal">{selectedItem.definition}</p>
+                          </div>
+
+                          {/* YouGlish Link */}
+                          <div className="flex items-center gap-2">
                             <a
-                              href={`https://youglish.com/pronounce/${encodeURIComponent(item.word_or_phrase)}/english`}
+                              href={`https://youglish.com/pronounce/${encodeURIComponent(selectedItem.word_or_phrase)}/english`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 hover:bg-indigo-100 active:bg-indigo-150 text-indigo-700 rounded-lg text-xs font-semibold transition-all border border-indigo-100/60 cursor-pointer hover:scale-[1.02] shadow-sm"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 active:bg-indigo-150 text-indigo-700 rounded-xl text-xs font-bold transition-all border border-indigo-100 cursor-pointer hover:scale-[1.02] shadow-xs"
                             >
                               <ExternalLink className="w-3.5 h-3.5" />
                               <span>Shadow on YouGlish</span>
                             </a>
                           </div>
 
-                          {/* Example Sentences Block */}
-                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80 animate-in fade-in space-y-1.5">
+                          {/* Example Sentences */}
+                          <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200/80 space-y-1.5">
                             <div className="flex items-center justify-between">
                               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide flex items-center gap-1">
                                 <BookOpen className="w-3 h-3 text-indigo-500" />
@@ -917,20 +1023,20 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId, items
                                 onClick={() => {
                                   setItemExamplesShown(prev => ({
                                     ...prev,
-                                    [item.id]: !isExamplesVisible
+                                    [selectedItem.id]: !isSelectedExamplesVisible
                                   }));
                                 }}
                                 className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer"
                               >
-                                {isExamplesVisible ? 'Hide' : 'Check Examples'}
+                                {isSelectedExamplesVisible ? 'Hide' : 'Check Examples'}
                               </button>
                             </div>
 
-                            {isExamplesVisible && (
+                            {isSelectedExamplesVisible && (
                               <div className="pt-1">
-                                {item.examples && item.examples.length > 0 ? (
+                                {selectedItem.examples && selectedItem.examples.length > 0 ? (
                                   <ul className="list-disc pl-4 space-y-1 text-xs text-slate-700 leading-relaxed font-medium">
-                                    {item.examples.map((ex, i) => (
+                                    {selectedItem.examples.map((ex, i) => (
                                       <li key={i}>{ex}</li>
                                     ))}
                                   </ul>
@@ -941,31 +1047,34 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId, items
                             )}
                           </div>
 
-                          {item.context_hint && (
-                            <div className="bg-slate-50 p-2.5 rounded-lg text-xs text-slate-500">
+                          {/* Context Hint */}
+                          {selectedItem.context_hint && (
+                            <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200/60 text-xs text-slate-500">
                               <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide mb-0.5">Original context</span>
-                              {item.context_hint}
+                              {selectedItem.context_hint}
                             </div>
                           )}
 
-                          {item.synonyms && item.synonyms.length > 0 && (
-                            <div className="bg-slate-50 p-2.5 rounded-lg text-xs text-slate-655 border border-slate-200/80 px-2 py-0.5 rounded-md font-medium">
+                          {/* Synonyms & Word Family */}
+                          {selectedItem.synonyms && selectedItem.synonyms.length > 0 && (
+                            <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200/80">
                               <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide mb-1">Synonyms</span>
                               <div className="flex flex-wrap gap-1 mt-1">
-                                {item.synonyms.map((syn, idx) => (
-                                  <span key={idx} className="text-xs bg-white text-slate-650 border border-slate-200/80 px-2 py-0.5 rounded-md font-medium">
+                                {selectedItem.synonyms.map((syn, idx) => (
+                                  <span key={idx} className="text-xs bg-white text-slate-700 border border-slate-200 px-2 py-0.5 rounded-md font-medium">
                                     {syn}
                                   </span>
                                 ))}
                               </div>
                             </div>
                           )}
-                          {item.word_family && item.word_family.length > 0 && (
-                            <div className="bg-slate-50 p-2.5 rounded-lg text-xs text-slate-650 border border-slate-150 animate-in fade-in">
+
+                          {selectedItem.word_family && selectedItem.word_family.length > 0 && (
+                            <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200/80">
                               <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide mb-1">Word Family</span>
                               <div className="flex flex-wrap gap-1 mt-1">
-                                {item.word_family.map((member, idx) => (
-                                  <span key={idx} className="text-xs bg-white text-slate-650 border border-slate-200/80 px-2 py-0.5 rounded-md font-medium">
+                                {selectedItem.word_family.map((member, idx) => (
+                                  <span key={idx} className="text-xs bg-white text-slate-700 border border-slate-200 px-2 py-0.5 rounded-md font-medium">
                                     {member}
                                   </span>
                                 ))}
@@ -973,60 +1082,87 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId, items
                             </div>
                           )}
 
-                          {/* Individual item ratings */}
-                          <div className="pt-2 border-t border-slate-100/50 flex flex-wrap items-center justify-between gap-2">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase">Rate your recall:</span>
-                            <div className="flex gap-1">
+                          {/* Recall Rating Buttons */}
+                          <div className="pt-3 border-t border-slate-100 space-y-2">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase block">Rate your recall for this word:</span>
+                            <div className="grid grid-cols-4 gap-1.5">
                               {[1, 2, 3, 4].map((score) => {
                                 const labels = ["Forgot", "Hard", "Good", "Easy"];
-                                const activeColor = ["bg-red-500 text-white", "bg-orange-500 text-white", "bg-blue-500 text-white", "bg-green-500 text-white"];
+                                const activeColor = ["bg-red-500 text-white", "bg-orange-500 text-white", "bg-blue-500 text-white", "bg-emerald-500 text-white"];
+                                const currentRating = batchRatings[selectedItem.id];
                                 const selected = currentRating === score;
                                 return (
                                   <button
                                     key={score}
-                                    onClick={() => handleRateBatchItem(item.id, score)}
-                                    className={`px-2 py-1 rounded-md text-[10px] font-bold border transition-all ${selected ? activeColor[score - 1] + ' border-transparent shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'}`}
+                                    onClick={() => handleRateBatchItem(selectedItem.id, score)}
+                                    className={`py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer flex flex-col items-center justify-center ${
+                                      selected 
+                                        ? activeColor[score - 1] + ' border-transparent shadow-sm scale-102' 
+                                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:scale-102'
+                                    }`}
                                   >
-                                    {labels[score - 1]}
+                                    <span>{score}</span>
+                                    <span className="text-[9px] font-normal opacity-90">{labels[score - 1]}</span>
                                   </button>
                                 );
                               })}
                             </div>
                           </div>
                         </div>
+                      ) : (
+                        <div className="py-8 text-center space-y-3">
+                          <p className="text-xs text-slate-400 font-medium">Click <strong>Reveal Meaning</strong> or click this word in the story to view its definition, examples, and rating options.</p>
+                          <button
+                            onClick={() => setRevealedIds(prev => ({ ...prev, [selectedItem.id]: true }))}
+                            className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl hover:bg-indigo-700 transition-all shadow-sm cursor-pointer"
+                          >
+                            Reveal Meaning
+                          </button>
+                        </div>
                       )}
                     </div>
-                  );
-                })}
-              </div>
-
-              {/* Submit Batch Control */}
-              <div className="pt-4 shrink-0">
-                <button
-                  onClick={submitPassiveBatch}
-                  disabled={
-                    isSubmittingBatch ||
-                    isGeneratingStory || 
-                    passiveBatches[currentBatchIndex]?.some(item => batchRatings[item.id] === undefined)
-                  }
-                  className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-100 cursor-pointer disabled:cursor-not-allowed"
-                >
-                  {isSubmittingBatch ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" /> Submitting batch reviews...
-                    </>
                   ) : (
-                    <>
-                      <Check className="w-5 h-5" /> Submit Batch reviews
-                    </>
+                    <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm text-center text-slate-400 text-xs">
+                      Select a word from the story or batch list above to view details.
+                    </div>
                   )}
-                </button>
-                {passiveBatches[currentBatchIndex]?.some(item => batchRatings[item.id] === undefined) && (
-                  <p className="text-center text-xs text-slate-400 mt-2 font-medium">Please reveal and rate all items in the batch to continue.</p>
-                )}
+
+                  {/* Submit Batch Control */}
+                  <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm space-y-2">
+                    <button
+                      onClick={submitPassiveBatch}
+                      disabled={
+                        isSubmittingBatch ||
+                        isGeneratingStory || 
+                        currentBatch.some(item => batchRatings[item.id] === undefined)
+                      }
+                      className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-100 cursor-pointer disabled:cursor-not-allowed"
+                    >
+                      {isSubmittingBatch ? (
+                        <>
+                          <Loader2 className="w-5 h-5 animate-spin" /> Submitting batch reviews...
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-5 h-5" /> Submit Batch reviews
+                        </>
+                      )}
+                    </button>
+                    {currentBatch.some(item => batchRatings[item.id] === undefined) ? (
+                      <p className="text-center text-[11px] text-slate-400 font-medium">
+                        Please rate all words in the batch ({currentBatch.filter(i => batchRatings[i.id] !== undefined).length} / {currentBatch.length}) to submit.
+                      </p>
+                    ) : (
+                      <p className="text-center text-[11px] text-emerald-600 font-semibold flex items-center justify-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> All words in batch rated! Ready to submit.
+                      </p>
+                    )}
+                  </div>
+
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
         </div>
       </div>

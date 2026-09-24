@@ -193,7 +193,8 @@ export const generateIntakeAI = async (
 
 export const formatStoryHTML = (
   rawStory: string,
-  targetItems: { word_or_phrase: string; definition?: string; context_hint?: string }[] = []
+  targetItems: { id?: string; word_or_phrase: string; definition?: string; context_hint?: string }[] = [],
+  activeItemId?: string
 ): string => {
   if (!rawStory) return '';
 
@@ -203,7 +204,7 @@ export const formatStoryHTML = (
   processed = processed.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
   processed = processed.replace(/<b>(.*?)<\/b>/gi, '<strong>$1</strong>');
 
-  // 2. Ensure all target items are wrapped in <strong> tags if missing from LLM output
+  // 2. Ensure all target items are wrapped in interactive <strong> tags if missing from LLM output
   if (targetItems && targetItems.length > 0) {
     const sortedTargets = [...targetItems].sort(
       (a, b) => b.word_or_phrase.length - a.word_or_phrase.length
@@ -214,9 +215,14 @@ export const formatStoryHTML = (
       if (!phrase) return;
 
       const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
       const parts = processed.split(/(<[^>]+>)/g);
       let insideStrong = false;
+
+      const idAttr = item.id ? ` data-item-id="${item.id}"` : '';
+      const phraseAttr = ` data-word-phrase="${encodeURIComponent(phrase)}"`;
+      const isActive = item.id && activeItemId === item.id;
+      const activeClass = isActive ? ' active-story-word' : '';
+      const strongTag = `<strong class="story-word-tag${activeClass}"${idAttr}${phraseAttr}>$1</strong>`;
 
       for (let i = 0; i < parts.length; i++) {
         const part = parts[i];
@@ -227,20 +233,34 @@ export const formatStoryHTML = (
           // First try exact phrase match
           const exactRegex = new RegExp(`\\b(${escaped})\\b`, 'gi');
           if (exactRegex.test(part)) {
-            parts[i] = part.replace(exactRegex, '<strong>$1</strong>');
+            parts[i] = part.replace(exactRegex, strongTag);
           } else if (!phrase.includes(' ') && phrase.length > 3) {
             // For single words, try inflection stem matching (e.g. analyze -> analyze/analyzed/analyzing)
             const stem = phrase.replace(/(ing|ed|es|e|s)$/i, '');
             if (stem.length >= 3) {
               const stemEscaped = stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
               const stemRegex = new RegExp(`\\b(${stemEscaped}[a-z]*)\\b`, 'gi');
-              parts[i] = part.replace(stemRegex, '<strong>$1</strong>');
+              parts[i] = part.replace(stemRegex, strongTag);
             }
           }
         }
       }
 
       processed = parts.join('');
+    });
+
+    // Tag any plain <strong> words created by step 1 or LLM output
+    sortedTargets.forEach(item => {
+      const phrase = item.word_or_phrase.trim();
+      if (!phrase) return;
+      const idAttr = item.id ? ` data-item-id="${item.id}"` : '';
+      const phraseAttr = ` data-word-phrase="${encodeURIComponent(phrase)}"`;
+      const isActive = item.id && activeItemId === item.id;
+      const activeClass = isActive ? ' active-story-word' : '';
+
+      const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const plainTagRegex = new RegExp(`<strong>(${escaped})<\\/strong>`, 'gi');
+      processed = processed.replace(plainTagRegex, `<strong class="story-word-tag${activeClass}"${idAttr}${phraseAttr}>$1</strong>`);
     });
 
     // 3. Fallback Guarantee: If any target item is completely missing from the generated story, append context note
@@ -268,7 +288,11 @@ export const formatStoryHTML = (
     if (missingItems.length > 0) {
       const fallbackHtml = missingItems.map(item => {
         const def = item.definition ? item.definition.trim() : 'Definition unavailable';
-        return `<p class="mt-3 text-slate-700 font-sans italic border-l-2 border-indigo-400 pl-3">Context note: In practice, <strong>${item.word_or_phrase}</strong> means "${def}".</p>`;
+        const idAttr = item.id ? ` data-item-id="${item.id}"` : '';
+        const phraseAttr = ` data-word-phrase="${encodeURIComponent(item.word_or_phrase)}"`;
+        const isActive = item.id && activeItemId === item.id;
+        const activeClass = isActive ? ' active-story-word' : '';
+        return `<p class="mt-3 text-slate-700 font-sans italic border-l-2 border-indigo-400 pl-3">Context note: In practice, <strong class="story-word-tag${activeClass}"${idAttr}${phraseAttr}>${item.word_or_phrase}</strong> means "${def}".</p>`;
       }).join('');
 
       processed += fallbackHtml;
