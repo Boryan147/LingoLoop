@@ -4,8 +4,9 @@ import Dashboard from './components/Dashboard';
 import Capture from './components/Capture';
 import ReviewSession from './components/ReviewSession';
 import Auth from './components/Auth';
-import { Page, VocabularyItem, StudyStats } from './types';
+import { Page, VocabularyItem, StudyStats, DailyLog } from './types';
 import * as storage from './services/storage';
+import { RoundKind } from './services/mission';
 import { supabase } from './services/supabase';
 import { LogOut } from 'lucide-react';
 
@@ -18,8 +19,9 @@ const App: React.FC = () => {
     passiveItems: 0,
     itemsDue: 0,
     retentionRate: 100,
-    streak: 0,
   });
+  const [dailyLogs, setDailyLogs] = useState<DailyLog[]>([]);
+  const [reviewMode, setReviewMode] = useState<RoundKind>('MISSION');
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const lastUserIdRef = useRef<string | null>(null);
@@ -52,7 +54,8 @@ const App: React.FC = () => {
       } else {
         lastUserIdRef.current = null;
         setItems([]);
-        setStats({ totalItems: 0, activeItems: 0, passiveItems: 0, itemsDue: 0, retentionRate: 100, streak: 0 });
+        setStats({ totalItems: 0, activeItems: 0, passiveItems: 0, itemsDue: 0, retentionRate: 100 });
+        setDailyLogs([]);
         setLoading(false);
       }
     });
@@ -69,13 +72,19 @@ const App: React.FC = () => {
 
   const refreshData = async (userId?: string) => {
     const currentUserId = userId || session?.user?.id;
-    const storedItems = await storage.getItems(currentUserId);
+    const [storedItems, storedLogs] = await Promise.all([
+      storage.getItems(currentUserId),
+      storage.getDailyLogs(currentUserId),
+    ]);
     const currentStats = storage.getStats(storedItems);
+    const syncedLogs = await storage.syncGoalMet(storedItems, storedLogs, currentUserId);
     setItems(storedItems);
     setStats(currentStats);
+    setDailyLogs(syncedLogs);
   };
 
-  const handleNavigate = (page: Page) => {
+  const handleNavigate = (page: Page, mode: RoundKind = 'MISSION') => {
+    if (page === Page.REVIEW) setReviewMode(mode);
     setCurrentPage(page);
     refreshData().catch((err) => console.error('Error refreshing data on navigation:', err));
   };
@@ -103,8 +112,9 @@ const App: React.FC = () => {
           <div key="dashboard" className="animate-in fade-in duration-200 h-full">
             <Dashboard
               stats={stats}
-              onReviewStart={() => handleNavigate(Page.REVIEW)}
+              onReviewStart={(mode) => handleNavigate(Page.REVIEW, mode)}
               items={items}
+              dailyLogs={dailyLogs}
               userId={session?.user?.id}
               onUpdate={() => refreshData()}
             />
@@ -123,7 +133,13 @@ const App: React.FC = () => {
       case Page.REVIEW:
         return (
           <div key="review" className="animate-in fade-in duration-200 h-full">
-            <ReviewSession items={items} onComplete={() => handleNavigate(Page.DASHBOARD)} userId={session.user.id} />
+            <ReviewSession
+              items={items}
+              dailyLogs={dailyLogs}
+              mode={reviewMode}
+              onComplete={() => handleNavigate(Page.DASHBOARD)}
+              userId={session.user.id}
+            />
           </div>
         );
       default:
@@ -131,8 +147,9 @@ const App: React.FC = () => {
           <div key="dashboard-default" className="animate-in fade-in duration-200 h-full">
             <Dashboard
               stats={stats}
-              onReviewStart={() => handleNavigate(Page.REVIEW)}
+              onReviewStart={(mode) => handleNavigate(Page.REVIEW, mode)}
               items={items}
+              dailyLogs={dailyLogs}
               userId={session?.user?.id}
               onUpdate={() => refreshData()}
             />
@@ -144,7 +161,7 @@ const App: React.FC = () => {
   return (
     <div className="flex flex-col md:flex-row h-screen bg-slate-50 font-sans text-slate-900 overflow-hidden">
       {/* Navigation - Sidebar on desktop, Bottom bar on mobile */}
-      <Navbar currentPage={currentPage} onNavigate={handleNavigate} />
+      <Navbar currentPage={currentPage} onNavigate={(page) => handleNavigate(page)} />
 
       {/* Main Content Area */}
       <main className="flex-1 h-full overflow-y-auto relative pb-16 md:pb-0">

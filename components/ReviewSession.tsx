@@ -1,36 +1,51 @@
-import React, { useState, useEffect } from 'react';
-import { VocabularyItem } from '../types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { VocabularyItem, VocabularyType, DailyLog } from '../types';
 import { calculateNextReview, getInitialSRSState } from '../services/srs';
 import { generateDailyPassiveContext, evaluateSentence, generateIntakeAI, formatStoryHTML } from '../services/gemini';
 import * as storage from '../services/storage';
-import { PartyPopper, Lightbulb, Zap, Eye, Sparkles, Check, HelpCircle, Loader2, ExternalLink, X, AlertCircle, CheckCircle2, Plus, RefreshCw, BookOpen } from 'lucide-react';
+import { RoundKind, buildRound, computeStreak, findLog, getMissionStatus, shouldMarkGoalMet, toDayKey, BONUS_ROUND_SIZE } from '../services/mission';
+import { PartyPopper, Lightbulb, Zap, Eye, Sparkles, Check, HelpCircle, Loader2, ExternalLink, X, AlertCircle, CheckCircle2, Plus, RefreshCw, BookOpen, Flame } from 'lucide-react';
 
 interface ReviewSessionProps {
   onComplete: () => void;
   userId: string;
   items?: VocabularyItem[];
+  dailyLogs?: DailyLog[];
+  mode?: RoundKind;
 }
 
-const calculatePassiveBatches = (items: VocabularyItem[]): VocabularyItem[][] => {
-  const total = items.length;
-  if (total === 0) return [];
-  
-  // Dynamic batch sizing tuned for passive review (max 8 items per batch)
-  const maxPerBatch = total <= 8 ? total : 8;
+// A round is a fixed set of words picked when the session starts, so resuming after a reload
+// continues the same cards instead of re-picking from the due pool.
+interface SavedRound {
+  day: string;
+  kind: RoundKind;
+  activeIds: string[];
+  passiveIds: string[];
+}
 
-  const numBatches = Math.ceil(total / maxPerBatch);
-  const itemsPerBatch = Math.ceil(total / numBatches);
+const ROUND_KEY = 'lingoloop_review_round';
 
-  const batches: VocabularyItem[][] = [];
-  for (let i = 0; i < total; i += itemsPerBatch) {
-    batches.push(items.slice(i, i + itemsPerBatch));
+const readSavedRound = (): SavedRound | null => {
+  try {
+    const raw = sessionStorage.getItem(ROUND_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
   }
-  return batches;
 };
 
-const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId, items }) => {
+const updateSavedRound = (changes: Partial<SavedRound>) => {
+  const round = readSavedRound();
+  if (round) sessionStorage.setItem(ROUND_KEY, JSON.stringify({ ...round, ...changes }));
+};
+
+const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId, items, dailyLogs = [], mode }) => {
+  const initialKind: RoundKind = mode || 'MISSION';
   const [activeQueue, setActiveQueue] = useState<VocabularyItem[]>([]);
-  const [passiveQueue, setPassiveQueue] = useState<VocabularyItem[]>([]);
+  const [roundKind, setRoundKind] = useState<RoundKind>(initialKind);
+  // Working copy of all items, kept current as words get rated so bonus rounds never re-pick them
+  const [sessionItems, setSessionItems] = useState<VocabularyItem[]>([]);
+  const [todayLog, setTodayLog] = useState<DailyLog>(() => findLog(dailyLogs, toDayKey()));
   
   const clearReviewSessionStorage = () => {
     sessionStorage.removeItem('lingoloop_review_story');
@@ -38,10 +53,32 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId, items
     sessionStorage.removeItem('lingoloop_review_batch_index');
     sessionStorage.removeItem('lingoloop_review_active_index');
     sessionStorage.removeItem('lingoloop_review_phase');
+    sessionStorage.removeItem(ROUND_KEY);
   };
 
-  // Phase management: 'ACTIVE' -> 'PASSIVE' -> 'COMPLETE'
-  const [phase, setPhase] = useState<'LOADING' | 'ACTIVE' | 'PASSIVE' | 'COMPLETE'>('LOADING');
+  // Phase management: 'ACTIVE' -> 'PASSIVE' -> 'COMPLETE' ('SELECT' lets the user switch between them)
+  const [phase, setPhase] = useState<'LOADING' | 'SELECT' | 'ACTIVE' | 'PASSIVE' | 'COMPLETE'>('LOADING');
+
+  const missionStatus = useMemo(() => getMissionStatus(sessionItems, todayLog), [sessionItems, todayLog]);
+
+  const applyItemUpdates = (updated: VocabularyItem[]) => {
+    const byId = new Map(updated.map(item => [item.id, item]));
+    setSessionItems(prev => prev.map(item => byId.get(item.id) || item));
+  };
+
+  const recordProgress = (type: VocabularyType, count: number) => {
+    setTodayLog(prev => type === 'ACTIVE'
+      ? { ...prev, active_reviewed: prev.active_reviewed + count }
+      : { ...prev, passive_reviewed: prev.passive_reviewed + count });
+    storage.recordReviews(type, count, userId);
+  };
+
+  // Persist the mission as done the moment it's finished, so it counts toward the streak
+  useEffect(() => {
+    if (!shouldMarkGoalMet(sessionItems, todayLog)) return;
+    setTodayLog(prev => ({ ...prev, goal_met: true }));
+    storage.markGoalMet(todayLog.day, userId);
+  }, [sessionItems, todayLog]);
 
   // ACTIVE Phase states
   const [activeIndex, setActiveIndex] = useState(() => {
@@ -299,84 +336,79 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId, items
     }
   }, [currentStory, currentBatchIndex, passiveBatches, phase]);
 
+  const startRound = (kind: RoundKind, pool: VocabularyItem[], log: DailyLog) => {
+    clearReviewSessionStorage();
+    const round = buildRound(kind, pool, log);
+
+    setRoundKind(kind);
+    setActiveIndex(0);
+    setCurrentBatchIndex(0);
+    setCurrentStory('');
+    setIsActiveFlipped(false);
+    setSentenceInput('');
+    setSentenceFeedback(null);
+    setSentenceError(null);
+
+    if (!round) {
+      setActiveQueue([]);
+      setPassiveBatches([]);
+      setPhase('COMPLETE');
+      return;
+    }
+
+    sessionStorage.setItem(ROUND_KEY, JSON.stringify({
+      day: toDayKey(),
+      kind,
+      activeIds: round.active.map(item => item.id),
+      passiveIds: round.passive.map(item => item.id),
+    } as SavedRound));
+    setActiveQueue(round.active);
+    setPassiveBatches(round.passive.length > 0 ? [round.passive] : []);
+    setPhase(round.active.length > 0 ? 'ACTIVE' : 'PASSIVE');
+  };
+
+  const finishRound = () => {
+    clearReviewSessionStorage();
+    setPhase('COMPLETE');
+  };
+
   useEffect(() => {
-    const fetchDue = async () => {
+    const init = async () => {
       const allItems = (items && items.length > 0) ? items : await storage.getItems(userId);
-      const dueItems = allItems.filter(item => item.nextReviewDate <= Date.now());
-      
-      const active = dueItems.filter(item => item.type === 'ACTIVE');
-      const passive = dueItems.filter(item => item.type === 'PASSIVE');
-      
-      setActiveQueue(active);
-      setPassiveQueue(passive);
+      setSessionItems(allItems);
 
-      // Create dynamically scaled passive batches based on total passive queue size
-      const batches = calculatePassiveBatches(passive);
-      setPassiveBatches(batches);
-
-      const savedPhase = sessionStorage.getItem('lingoloop_review_phase');
-      const savedActiveIndex = Number(sessionStorage.getItem('lingoloop_review_active_index') || '0');
-      const savedBatchIndex = Number(sessionStorage.getItem('lingoloop_review_batch_index') || '0');
-
-      let finalPhase = savedPhase;
-      let finalActiveIndex = savedActiveIndex;
-
-      // If we are starting fresh (no index progress has been recorded yet),
-      // we decide the phase dynamically. If both active and passive are due, we force SELECT mode
-      // so the user can choose. If only one is due, we auto-route them.
-      const isFreshSession = savedActiveIndex === 0 && savedBatchIndex === 0;
-      if (isFreshSession) {
-        if (active.length > 0 && batches.length > 0) {
-          finalPhase = 'SELECT';
-        } else if (active.length > 0) {
-          finalPhase = 'ACTIVE';
-        } else if (batches.length > 0) {
-          finalPhase = 'PASSIVE';
-        } else {
-          finalPhase = 'COMPLETE';
-        }
-        sessionStorage.setItem('lingoloop_review_phase', finalPhase);
-      } else {
-        // Bounds checking for resume cases
-        if (savedPhase === 'ACTIVE') {
-          if (active.length === 0 || savedActiveIndex >= active.length) {
-            finalActiveIndex = 0;
-            setActiveIndex(0);
-            sessionStorage.setItem('lingoloop_review_active_index', '0');
-            if (batches.length > 0) {
-              finalPhase = 'SELECT';
-              sessionStorage.setItem('lingoloop_review_phase', 'SELECT');
-            } else {
-              finalPhase = 'COMPLETE';
-              sessionStorage.setItem('lingoloop_review_phase', 'COMPLETE');
-            }
-          }
-        } else if (savedPhase === 'PASSIVE') {
-          if (batches.length === 0 || savedBatchIndex >= batches.length) {
-            setCurrentBatchIndex(0);
-            sessionStorage.setItem('lingoloop_review_batch_index', '0');
-            if (active.length > 0) {
-              finalPhase = 'SELECT';
-              sessionStorage.setItem('lingoloop_review_phase', 'SELECT');
-            } else {
-              finalPhase = 'COMPLETE';
-              sessionStorage.setItem('lingoloop_review_phase', 'COMPLETE');
-            }
-          }
-        }
+      const saved = readSavedRound();
+      if (!saved || saved.day !== toDayKey()) {
+        startRound(initialKind, allItems, todayLog);
+        return;
       }
 
-      if (finalPhase === 'ACTIVE' || finalPhase === 'PASSIVE' || finalPhase === 'SELECT' || finalPhase === 'COMPLETE') {
-        setPhase(finalPhase as any);
+      // Resume the round that was in progress before a reload or tab switch
+      const byId = new Map(allItems.map(item => [item.id, item]));
+      const active = saved.activeIds.map(id => byId.get(id)).filter((i): i is VocabularyItem => !!i);
+      const passive = saved.passiveIds.map(id => byId.get(id)).filter((i): i is VocabularyItem => !!i);
+      const savedPhase = sessionStorage.getItem('lingoloop_review_phase');
+      const activeLeft = active.length > 0 && activeIndex < active.length;
+
+      setRoundKind(saved.kind);
+      setActiveQueue(activeLeft ? active : []);
+      setPassiveBatches(passive.length > 0 ? [passive] : []);
+      setCurrentBatchIndex(0);
+      if (!activeLeft) setActiveIndex(0);
+
+      if (savedPhase === 'PASSIVE' && passive.length > 0) {
+        setPhase('PASSIVE');
+      } else if (savedPhase === 'SELECT' && activeLeft && passive.length > 0) {
+        setPhase('SELECT');
+      } else if (activeLeft) {
+        setPhase('ACTIVE');
+      } else if (passive.length > 0) {
+        setPhase('PASSIVE');
       } else {
-        if (active.length > 0 || batches.length > 0) {
-          setPhase('SELECT');
-        } else {
-          setPhase('COMPLETE');
-        }
+        finishRound();
       }
     };
-    fetchDue();
+    init();
   }, [userId]);
 
   const loadBatchStory = async () => {
@@ -426,6 +458,8 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId, items
     storage.updateItem(updatedItem, userId).catch((err) => {
       console.error("Failed to save item rating:", err);
     });
+    applyItemUpdates([updatedItem]);
+    recordProgress('ACTIVE', 1);
 
     if (activeIndex < activeQueue.length - 1) {
       setIsActiveFlipped(false);
@@ -437,16 +471,15 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId, items
         setIsSubmittingRating(false);
       }, 200);
     } else {
-      // Finished ACTIVE phase
+      // Finished the active part of this round
       sessionStorage.removeItem('lingoloop_review_active_index');
+      updateSavedRound({ activeIds: [] });
       setActiveQueue([]);
       setIsSubmittingRating(false);
       if (passiveBatches.length > 0) {
-        setPhase('SELECT');
-        sessionStorage.setItem('lingoloop_review_phase', 'SELECT');
+        setPhase('PASSIVE');
       } else {
-        clearReviewSessionStorage();
-        setPhase('COMPLETE');
+        finishRound();
       }
     }
   };
@@ -499,33 +532,27 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId, items
       const batch = passiveBatches[currentBatchIndex];
       
       if (batch && batch.length > 0) {
+        const updatedItems = batch.map(item => {
+          const rating = batchRatings[item.id] || 3; // Default to Good if unrated (safety)
+          const updates = calculateNextReview(item, rating);
+          return { ...item, ...updates, updatedAt: Date.now() } as VocabularyItem;
+        });
         // Save all reviews for the current batch concurrently
-        await Promise.all(
-          batch.map(item => {
-            const rating = batchRatings[item.id] || 3; // Default to Good if unrated (safety)
-            const updates = calculateNextReview(item, rating);
-            const updatedItem = { ...item, ...updates, updatedAt: Date.now() } as VocabularyItem;
-            return storage.updateItem(updatedItem, userId);
-          })
-        );
+        await Promise.all(updatedItems.map(updatedItem => storage.updateItem(updatedItem, userId)));
+        applyItemUpdates(updatedItems);
+        recordProgress('PASSIVE', updatedItems.length);
       }
 
-      if (currentBatchIndex < passiveBatches.length - 1) {
-        sessionStorage.removeItem('lingoloop_review_story');
-        setCurrentStory('');
-        setCurrentBatchIndex(prev => prev + 1);
+      // A round has a single story, so submitting it finishes the passive part
+      sessionStorage.removeItem('lingoloop_review_story');
+      sessionStorage.removeItem('lingoloop_review_story_item_ids');
+      sessionStorage.removeItem('lingoloop_review_batch_index');
+      updateSavedRound({ passiveIds: [] });
+      setPassiveBatches([]);
+      if (activeQueue.length > 0) {
+        setPhase('ACTIVE');
       } else {
-        sessionStorage.removeItem('lingoloop_review_story');
-        sessionStorage.removeItem('lingoloop_review_story_item_ids');
-        sessionStorage.removeItem('lingoloop_review_batch_index');
-        setPassiveBatches([]);
-        if (activeQueue.length > 0) {
-          setPhase('SELECT');
-          sessionStorage.setItem('lingoloop_review_phase', 'SELECT');
-        } else {
-          clearReviewSessionStorage();
-          setPhase('COMPLETE');
-        }
+        finishRound();
       }
     } catch (err) {
       console.error("Failed to submit passive batch:", err);
@@ -551,9 +578,11 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId, items
   if (phase === 'SELECT') {
     return (
       <div className="flex flex-col items-center justify-center min-h-[85vh] text-center p-4 md:p-8 animate-in fade-in duration-300">
-        <h2 className="text-3xl font-extrabold text-slate-900 mb-2 tracking-tight">Daily Review</h2>
+        <h2 className="text-3xl font-extrabold text-slate-900 mb-2 tracking-tight">
+          {roundKind === 'MISSION' ? "Today's Mission" : 'Bonus Round'}
+        </h2>
         <p className="text-slate-500 mb-8 max-w-md">
-          Choose which vocabulary type you want to practice first. Let's keep that forgetting curve flat!
+          Choose which part to do next. Let's keep that forgetting curve flat!
         </p>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-2xl mb-8">
@@ -576,7 +605,7 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId, items
               Recall the authentic English expression matching your trigger thought.
             </p>
             <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide ${activeQueue.length > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-              {activeQueue.length > 0 ? `${activeQueue.length} items due` : 'All Caught Up!'}
+              {activeQueue.length > 0 ? `${activeQueue.length - activeIndex} cards left` : 'Done'}
             </span>
           </button>
 
@@ -599,7 +628,7 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId, items
               Read custom AI stories using your target vocabulary.
             </p>
             <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide ${passiveBatches.length > 0 ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
-              {passiveBatches.length > 0 ? `${passiveBatches.length} batches due` : 'All Caught Up!'}
+              {passiveBatches.length > 0 ? `1 story · ${passiveBatches[0].length} words` : 'Done'}
             </span>
           </button>
         </div>
@@ -618,21 +647,74 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId, items
   }
 
   if (phase === 'COMPLETE') {
+    const streak = computeStreak([...dailyLogs.filter(l => l.day !== todayLog.day), todayLog]);
+    const canBonusActive = missionStatus.dueActive > 0;
+    const canBonusPassive = missionStatus.duePassive > 0;
+
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center p-8 animate-in zoom-in-95 duration-300">
-        <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-6">
-          <PartyPopper className="w-10 h-10" />
-        </div>
-        <h2 className="text-3xl font-bold text-slate-900 mb-2 tracking-tight">Review Complete!</h2>
-        <p className="text-slate-500 mb-8">
-          You completed all active and passive reviews for today.
-        </p>
+      <div className="flex flex-col items-center justify-center min-h-[85vh] text-center p-8 animate-in zoom-in-95 duration-300">
+        {missionStatus.isComplete ? (
+          <>
+            <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-6">
+              <PartyPopper className="w-10 h-10" />
+            </div>
+            <h2 className="text-3xl font-bold text-slate-900 mb-2 tracking-tight">
+              {roundKind === 'MISSION' ? "Today's mission complete!" : 'Bonus round done!'}
+            </h2>
+            <p className="text-slate-500 mb-6 max-w-sm">
+              That's all you need to do today. Anything more is a bonus.
+            </p>
+            {streak.current > 0 && (
+              <div className="flex items-center gap-2 px-4 py-2 bg-orange-50 border border-orange-100 rounded-2xl mb-8">
+                <Flame className="w-5 h-5 text-orange-500 fill-current" />
+                <span className="text-sm font-bold text-orange-700">{streak.current}-day streak</span>
+              </div>
+            )}
+            {(canBonusActive || canBonusPassive) && (
+              <div className="w-full max-w-sm mb-6">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Feeling good? Optional bonus</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => startRound('BONUS_ACTIVE', sessionItems, todayLog)}
+                    disabled={!canBonusActive}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:border-emerald-400 hover:bg-emerald-50 active:scale-95 transition-all shadow-sm cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-emerald-500 fill-current" /> +{BONUS_ROUND_SIZE} active cards
+                  </button>
+                  <button
+                    onClick={() => startRound('BONUS_PASSIVE', sessionItems, todayLog)}
+                    disabled={!canBonusPassive}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:border-blue-400 hover:bg-blue-50 active:scale-95 transition-all shadow-sm cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
+                  >
+                    <Eye className="w-3.5 h-3.5 text-blue-500" /> +1 story
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="w-20 h-20 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mb-6">
+              <CheckCircle2 className="w-10 h-10" />
+            </div>
+            <h2 className="text-3xl font-bold text-slate-900 mb-2 tracking-tight">Round complete</h2>
+            <p className="text-slate-500 mb-6">
+              Today's mission: {missionStatus.done} / {missionStatus.target}
+            </p>
+            <button
+              onClick={() => startRound('MISSION', sessionItems, todayLog)}
+              className="px-8 py-3 mb-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 cursor-pointer"
+            >
+              Continue today's mission
+            </button>
+          </>
+        )}
         <button
           onClick={() => {
             clearReviewSessionStorage();
             onComplete();
           }}
-          className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200"
+          className="px-8 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition-colors cursor-pointer"
         >
           Back to Dashboard
         </button>
@@ -676,10 +758,30 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ onComplete, userId, items
             <span>
               {phase === 'ACTIVE' 
                 ? `${activeIndex + 1} / ${activeQueue.length}`
-                : `Batch ${currentBatchIndex + 1} / ${passiveBatches.length}`
+                : `1 story · ${passiveBatches[currentBatchIndex]?.length || 0} words`
               }
             </span>
           </div>
+
+          {/* Mission progress */}
+          {roundKind === 'MISSION' ? (
+            <div className="mb-5 shrink-0">
+              <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                <span>Today's mission</span>
+                <span>{missionStatus.done} / {missionStatus.target}</span>
+              </div>
+              <div className="h-1.5 bg-slate-200/70 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-indigo-500 rounded-full transition-all duration-500"
+                  style={{ width: `${missionStatus.target > 0 ? (missionStatus.done / missionStatus.target) * 100 : 100}%` }}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="mb-5 shrink-0 text-[10px] font-bold text-orange-500 uppercase tracking-wider flex items-center gap-1">
+              <Flame className="w-3 h-3 fill-current" /> Bonus round · mission already done today
+            </div>
+          )}
 
           {/* ACTIVE recall flashcards */}
           {phase === 'ACTIVE' && currentActiveItem && (

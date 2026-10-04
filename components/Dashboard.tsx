@@ -1,20 +1,132 @@
 import React, { useRef } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { StudyStats, VocabularyItem } from '../types';
-import { Flame, Brain, Layers, ArrowUpRight, Download, Upload, Zap, Eye } from 'lucide-react';
+import { StudyStats, VocabularyItem, DailyLog } from '../types';
+import { Flame, Brain, Layers, ArrowRight, Download, Upload, Zap, Eye, Check, Snowflake, CalendarCheck } from 'lucide-react';
 import { exportBackup, importBackup } from '../services/storage';
 import { calculateAverageRetention } from '../services/srs';
+import { RoundKind, computeStreak, findLog, getMissionStatus, shiftDayKey, toDayKey, BONUS_ROUND_SIZE } from '../services/mission';
 
 interface DashboardProps {
   stats: StudyStats;
-  onReviewStart: () => void;
+  onReviewStart: (mode?: RoundKind) => void;
   items: VocabularyItem[];
+  dailyLogs: DailyLog[];
   userId?: string;
   onUpdate: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ stats, onReviewStart, items, userId, onUpdate }) => {
+const CALENDAR_WEEKS = 8;
+const WEEKDAY_LABELS = ['M', '', 'W', '', 'F', '', ''];
+
+const formatDay = (dayKey: string) => {
+  const [y, m, d] = dayKey.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
+type CalendarCell = { day: string; status: 'met' | 'partial' | 'frozen' | 'none' | 'future'; reviews: number };
+
+// GitHub-style grid of the last few weeks: one column per week, Monday at the top
+const buildCalendar = (logs: DailyLog[], frozenDays: Set<string>, today: string): CalendarCell[][] => {
+  const byDay = new Map(logs.map(l => [l.day, l]));
+  const [y, m, d] = today.split('-').map(Number);
+  const daysSinceMonday = (new Date(y, m - 1, d).getDay() + 6) % 7;
+  const start = shiftDayKey(today, -daysSinceMonday - (CALENDAR_WEEKS - 1) * 7);
+
+  return Array.from({ length: CALENDAR_WEEKS }, (_, week) =>
+    Array.from({ length: 7 }, (_, weekday) => {
+      const day = shiftDayKey(start, week * 7 + weekday);
+      const log = byDay.get(day);
+      const reviews = log ? log.active_reviewed + log.passive_reviewed : 0;
+      let status: CalendarCell['status'] = 'none';
+      if (day > today) status = 'future';
+      else if (log?.goal_met) status = 'met';
+      else if (frozenDays.has(day)) status = 'frozen';
+      else if (reviews > 0) status = 'partial';
+      return { day, status, reviews };
+    })
+  );
+};
+
+const CELL_STYLES: Record<CalendarCell['status'], string> = {
+  met: 'bg-emerald-500',
+  partial: 'bg-emerald-200',
+  frozen: 'bg-sky-300',
+  none: 'bg-slate-100',
+  future: 'bg-transparent',
+};
+
+const CELL_LABELS: Record<CalendarCell['status'], string> = {
+  met: 'Mission done',
+  partial: 'Some reviews',
+  frozen: 'Free miss used',
+  none: 'No reviews',
+  future: '',
+};
+
+const ProgressRing: React.FC<{ value: number; max: number; complete: boolean }> = ({ value, max, complete }) => {
+  const radius = 34;
+  const circumference = 2 * Math.PI * radius;
+  const fraction = max > 0 ? Math.min(1, value / max) : 1;
+
+  return (
+    <div className="relative w-24 h-24 shrink-0">
+      <svg viewBox="0 0 80 80" className="w-full h-full -rotate-90">
+        <circle cx="40" cy="40" r={radius} fill="none" stroke="#eef2ff" strokeWidth="8" />
+        <circle
+          cx="40"
+          cy="40"
+          r={radius}
+          fill="none"
+          stroke={complete ? '#10b981' : '#6366f1'}
+          strokeWidth="8"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={circumference * (1 - fraction)}
+          className="transition-all duration-700"
+        />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        {complete ? (
+          <Check className="w-9 h-9 text-emerald-500" strokeWidth={3} />
+        ) : (
+          <span className="text-xl font-bold text-slate-800">
+            {value}<span className="text-sm text-slate-400">/{max}</span>
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const MissionRow: React.FC<{ icon: React.ReactNode; label: string; done: number; target: number; barColor: string }> = ({ icon, label, done, target, barColor }) => (
+  <div>
+    <div className="flex justify-between items-center text-xs font-semibold text-slate-600 mb-1.5">
+      <span className="flex items-center gap-1.5">{icon} {label}</span>
+      <span className="text-slate-400">{target > 0 ? `${done} / ${target}` : 'Nothing due'}</span>
+    </div>
+    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+      <div
+        className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+        style={{ width: `${target > 0 ? (done / target) * 100 : 100}%` }}
+      />
+    </div>
+  </div>
+);
+
+const Dashboard: React.FC<DashboardProps> = ({ stats, onReviewStart, items, dailyLogs, userId, onUpdate }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const today = toDayKey();
+  const mission = getMissionStatus(items, findLog(dailyLogs, today));
+  const streak = computeStreak(dailyLogs, today);
+  const calendar = buildCalendar(dailyLogs, streak.frozenDays, today);
+  const weekStart = shiftDayKey(today, -6);
+  const reviewedThisWeek = dailyLogs
+    .filter(l => l.day >= weekStart)
+    .reduce((sum, l) => sum + l.active_reviewed + l.passive_reviewed, 0);
+  // Rough pace: ~35s per active card, ~3 min for the story
+  const estimatedMinutes = Math.max(1, Math.round(mission.activeTarget * 0.6 + (mission.passiveTarget > 0 ? 3 : 0)));
+  const hasWords = stats.totalItems > 0;
 
   const generateChartData = () => {
     if (items.length === 0) {
@@ -114,6 +226,137 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, onReviewStart, items, user
         </div>
       </header>
 
+      {/* Today's mission & streak */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 md:gap-6 mb-6">
+        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm lg:col-span-3 flex flex-col">
+          <div className="flex items-center gap-5">
+            <ProgressRing value={mission.done} max={mission.target} complete={hasWords && mission.isComplete} />
+            <div className="min-w-0">
+              <span className="text-xs font-semibold px-2 py-1 bg-indigo-50 text-indigo-600 rounded-full">Today's mission</span>
+              <h2 className="text-xl font-bold text-slate-800 mt-2">
+                {!hasWords
+                  ? 'Capture a few words to begin'
+                  : mission.isComplete
+                    ? (mission.target === 0 ? 'All caught up' : 'Done for today')
+                    : mission.done === 0
+                      ? `${mission.target} words · about ${estimatedMinutes} min`
+                      : `${mission.target - mission.done} words to go`}
+              </h2>
+              <p className="text-sm text-slate-500">
+                {!hasWords
+                  ? 'Your daily mission appears once you have saved vocabulary.'
+                  : mission.isComplete
+                    ? 'Anything more is a bonus. See you tomorrow.'
+                    : 'Small and done beats big and skipped.'}
+              </p>
+            </div>
+          </div>
+
+          {hasWords && (
+            <div className="space-y-3 mt-6">
+              <MissionRow
+                icon={<Zap className="w-3.5 h-3.5 text-emerald-500 fill-current" />}
+                label="Active recall cards"
+                done={mission.activeDone}
+                target={mission.activeTarget}
+                barColor="bg-emerald-500"
+              />
+              <MissionRow
+                icon={<Eye className="w-3.5 h-3.5 text-blue-500" />}
+                label="Passive words in 1 story"
+                done={mission.passiveDone}
+                target={mission.passiveTarget}
+                barColor="bg-blue-500"
+              />
+            </div>
+          )}
+
+          <div className="mt-auto pt-6">
+            {hasWords && !mission.isComplete && (
+              <button
+                onClick={() => onReviewStart('MISSION')}
+                className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 active:scale-[0.98] transition-all shadow-lg shadow-indigo-200 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {mission.done === 0 ? 'Start mission' : 'Continue mission'} <ArrowRight className="w-4 h-4" />
+              </button>
+            )}
+            {hasWords && mission.isComplete && (mission.dueActive > 0 || mission.duePassive > 0) && (
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Optional bonus</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => onReviewStart('BONUS_ACTIVE')}
+                    disabled={mission.dueActive === 0}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:border-emerald-400 hover:bg-emerald-50 active:scale-95 transition-all shadow-sm cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-emerald-500 fill-current" /> +{BONUS_ROUND_SIZE} active cards
+                  </button>
+                  <button
+                    onClick={() => onReviewStart('BONUS_PASSIVE')}
+                    disabled={mission.duePassive === 0}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:border-blue-400 hover:bg-blue-50 active:scale-95 transition-all shadow-sm cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
+                  >
+                    <Eye className="w-3.5 h-3.5 text-blue-500" /> +1 story
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm lg:col-span-2">
+          <div className="flex flex-wrap justify-between items-start gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-orange-50 rounded-xl">
+                <Flame className={`w-6 h-6 ${streak.current > 0 ? 'text-orange-500 fill-current' : 'text-slate-300'}`} />
+              </div>
+              <div>
+                <h3 className="text-3xl font-bold text-slate-800 leading-none">{streak.current}</h3>
+                <p className="text-sm text-slate-500 font-medium whitespace-nowrap">day streak</p>
+              </div>
+            </div>
+            <span
+              className={`text-[11px] font-semibold px-2 py-1 rounded-full flex items-center gap-1 whitespace-nowrap ${streak.freeMissReadyOn ? 'bg-slate-100 text-slate-500' : 'bg-sky-50 text-sky-700'}`}
+              title="Missing one day per week won't break your streak"
+            >
+              <Snowflake className="w-3 h-3" />
+              {streak.freeMissReadyOn ? `Free miss back ${formatDay(streak.freeMissReadyOn)}` : 'Free miss ready'}
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 mt-3">
+            {streak.todayMet
+              ? "Today's done. Your streak is safe."
+              : streak.current > 0
+                ? "Finish today's mission to keep it going."
+                : "Finish today's mission to start a streak."}
+          </p>
+
+          <div className="mt-5 flex gap-1">
+            <div className="flex flex-col gap-1 mr-1">
+              {WEEKDAY_LABELS.map((label, i) => (
+                <div key={i} className="h-4 text-[9px] leading-4 font-semibold text-slate-400">{label}</div>
+              ))}
+            </div>
+            {calendar.map((week, w) => (
+              <div key={w} className="flex flex-col gap-1">
+                {week.map(cell => (
+                  <div
+                    key={cell.day}
+                    title={cell.status === 'future' ? undefined : `${formatDay(cell.day)} · ${CELL_LABELS[cell.status]}${cell.reviews > 0 ? ` (${cell.reviews} reviews)` : ''}`}
+                    className={`w-4 h-4 rounded-[4px] ${CELL_STYLES[cell.status]} ${cell.day === today ? 'ring-2 ring-indigo-400 ring-offset-1' : ''}`}
+                  />
+                ))}
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-x-3 gap-y-1 mt-3 text-[10px] font-medium text-slate-400">
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" /> Mission done</span>
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-200" /> Some reviews</span>
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-sky-300" /> Free miss</span>
+          </div>
+        </div>
+      </div>
+
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-10">
         <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
@@ -129,37 +372,23 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, onReviewStart, items, user
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow relative overflow-hidden group">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-50/50 rounded-bl-full -mr-4 -mt-4 transition-transform group-hover:scale-110" />
-          <div className="flex justify-between items-start mb-4 relative z-10">
-            <div className="p-3 bg-red-50 rounded-xl">
-              <Brain className="w-6 h-6 text-red-500" />
+        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+          <div className="flex justify-between items-start mb-4">
+            <div className="p-3 bg-orange-50 rounded-xl">
+              <CalendarCheck className="w-6 h-6 text-orange-500" />
             </div>
-            {stats.itemsDue > 0 && (
-              <span className="flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-              </span>
-            )}
+            <span className="text-xs font-semibold px-2 py-1 bg-orange-50 text-orange-700 rounded-full">Last 7 days</span>
           </div>
-          <div className="relative z-10">
-            <h3 className="text-3xl font-bold text-slate-800">{stats.itemsDue}</h3>
-            <p className="text-sm text-slate-500 font-medium">Due for Review</p>
+          <div>
+            <h3 className="text-3xl font-bold text-slate-800">{reviewedThisWeek}</h3>
+            <p className="text-sm text-slate-500 font-medium">Words Reviewed</p>
           </div>
-          {stats.itemsDue > 0 && (
-            <button
-              onClick={onReviewStart}
-              className="mt-4 text-xs font-bold text-indigo-600 flex items-center gap-1 hover:gap-2 transition-all relative z-10"
-            >
-              Start Session <ArrowUpRight className="w-3 h-3" />
-            </button>
-          )}
         </div>
 
         <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
           <div className="flex justify-between items-start mb-4">
             <div className="p-3 bg-green-50 rounded-xl">
-              <Flame className="w-6 h-6 text-green-500" />
+              <Brain className="w-6 h-6 text-green-500" />
             </div>
             <span className="text-xs font-semibold px-2 py-1 bg-green-100 text-green-700 rounded-full">Retention</span>
           </div>

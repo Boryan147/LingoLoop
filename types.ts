@@ -35,5 +35,11 @@ export interface StudyStats {
   passiveItems: number;
   itemsDue: number;
   retentionRate: number; // Simulated based on SRS status
-  streak: number;
+}
+
+export interface DailyLog {
+  day: string; // Local calendar day, YYYY-MM-DD
+  active_reviewed: number;
+  passive_reviewed: number;
+  goal_met: boolean;
 }

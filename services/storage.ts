@@ -1,8 +1,10 @@
-import { VocabularyItem, StudyStats } from '../types';
+import { VocabularyItem, VocabularyType, StudyStats, DailyLog } from '../types';
 import { supabase } from './supabase';
 import { calculateAverageRetention } from './srs';
+import { toDayKey, findLog, shouldMarkGoalMet } from './mission';
 
 const STORAGE_KEY = 'lingoloop_vocab_v2';
+const DAILY_LOG_KEY = 'lingoloop_daily_log_v1';
 
 export const generateId = () => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -225,8 +227,105 @@ export const getStats = (items: VocabularyItem[]): StudyStats => {
     passiveItems,
     itemsDue: due,
     retentionRate: items.length ? Math.round(avgRetention * 100) : 100,
-    streak: 3 // Mock streak for demo
   };
+};
+
+// --- Daily Log (mission progress & streak) ---
+const getLocalLogs = (): Record<string, DailyLog> => {
+  try {
+    const data = localStorage.getItem(DAILY_LOG_KEY);
+    return data ? JSON.parse(data) : {};
+  } catch (e) {
+    console.error("Failed to load local daily log", e);
+    return {};
+  }
+};
+
+const saveLocalLog = (log: DailyLog) => {
+  const logs = getLocalLogs();
+  logs[log.day] = log;
+  localStorage.setItem(DAILY_LOG_KEY, JSON.stringify(logs));
+};
+
+const mapLogFromSupabase = (data: any): DailyLog => ({
+  day: data.day,
+  active_reviewed: data.active_reviewed || 0,
+  passive_reviewed: data.passive_reviewed || 0,
+  goal_met: !!data.goal_met,
+});
+
+export const getDailyLogs = async (userId?: string): Promise<DailyLog[]> => {
+  if (!userId) {
+    return Object.values(getLocalLogs());
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('daily_log')
+      .select('day, active_reviewed, passive_reviewed, goal_met')
+      .eq('user_id', userId)
+      .order('day', { ascending: true });
+
+    if (error) throw error;
+    return (data || []).map(mapLogFromSupabase);
+  } catch (e) {
+    console.error("Failed to load daily log from Supabase", e);
+    return [];
+  }
+};
+
+export const recordReviews = async (type: VocabularyType, count: number, userId?: string) => {
+  const day = toDayKey();
+  const active = type === 'ACTIVE' ? count : 0;
+  const passive = type === 'PASSIVE' ? count : 0;
+
+  if (!userId) {
+    const log = findLog(Object.values(getLocalLogs()), day);
+    saveLocalLog({
+      ...log,
+      active_reviewed: log.active_reviewed + active,
+      passive_reviewed: log.passive_reviewed + passive,
+    });
+    return;
+  }
+
+  try {
+    const { error } = await supabase.rpc('increment_daily_log', {
+      p_day: day,
+      p_active: active,
+      p_passive: passive,
+    });
+    if (error) throw error;
+  } catch (e) {
+    console.error("Failed to record reviews in daily log", e);
+  }
+};
+
+export const markGoalMet = async (day: string, userId?: string) => {
+  if (!userId) {
+    const log = findLog(Object.values(getLocalLogs()), day);
+    saveLocalLog({ ...log, goal_met: true });
+    return;
+  }
+
+  try {
+    const { error } = await supabase
+      .from('daily_log')
+      .upsert([{ user_id: userId, day, goal_met: true, updated_at: Date.now() }], { onConflict: 'user_id,day' });
+    if (error) throw error;
+  } catch (e) {
+    console.error("Failed to mark daily goal as met", e);
+  }
+};
+
+// Persists today's mission as met when it's finished (including days where nothing was due)
+export const syncGoalMet = async (items: VocabularyItem[], logs: DailyLog[], userId?: string): Promise<DailyLog[]> => {
+  const today = toDayKey();
+  const todayLog = findLog(logs, today);
+  if (!shouldMarkGoalMet(items, todayLog)) return logs;
+
+  await markGoalMet(today, userId);
+  return [...logs.filter(l => l.day !== today), { ...todayLog, goal_met: true }];
 };
 
 export const exportBackup = (items: VocabularyItem[]): string => {
